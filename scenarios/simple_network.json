@@ -1,0 +1,9 @@
+{
+  "hosts": [
+    {
+      "ip": "10.0.0.1",
+      "ports": [22, 80],
+      "vulnerabilities": ["weak_ssh_password"]
+    }
+  ]
+}
