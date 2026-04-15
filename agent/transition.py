@@ -2,7 +2,7 @@ from core.actions import (
     Action,
     DISCOVER_HOST,
     SCAN_HOST,
-    ENUMERATE_HTTP,
+    ENUM_HTTP,
     IDENTIFY_VULNERABILITY,
     EXPLOIT_UPLOAD,
     READ_SENSITIVE_FILE,
@@ -14,7 +14,7 @@ from core.state import State, Credential
 ACTION_COSTS = {
     DISCOVER_HOST: 1,
     SCAN_HOST: 1,
-    ENUMERATE_HTTP: 2,
+    ENUM_HTTP: 2,
     IDENTIFY_VULNERABILITY: 2,
     EXPLOIT_UPLOAD: 3,
     READ_SENSITIVE_FILE: 1,
@@ -49,7 +49,7 @@ def apply_action(state: State, action: Action, scenario: dict) -> State | None:
             service["port"]: service["name"] for service in host["services"]
         }
 
-    elif action.name == ENUMERATE_HTTP:
+    elif action.name == ENUM_HTTP:
         if host_id not in new_state.scanned_hosts:
             return None
 
