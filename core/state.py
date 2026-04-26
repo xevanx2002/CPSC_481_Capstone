@@ -57,3 +57,34 @@ class State:
 
     def get_access_level(self, host_id: str) -> str:
         return self.access_levels.get(host_id, "none")
+
+    def signature(self) -> tuple:
+        return (
+            frozenset(self.discovered_hosts),
+            frozenset(self.scanned_hosts),
+            frozenset(
+                (host, port)
+                for host, ports in self.open_ports.items()
+                for port in ports
+            ),
+            frozenset(
+                (host, port, name)
+                for host, services in self.discovered_services.items()
+                for port, name in services.items()
+            ),
+            frozenset(
+                (host, path)
+                for host, paths in self.discovered_paths.items()
+                for path in paths
+            ),
+            frozenset(
+                (host, vuln)
+                for host, vulns in self.discovered_vulns.items()
+                for vuln in vulns
+            ),
+            frozenset(self.access_levels.items()),
+            frozenset(self.compromised_hosts),
+            frozenset(
+                (c.username, c.password, c.access) for c in self.creds_found
+            ),
+        )

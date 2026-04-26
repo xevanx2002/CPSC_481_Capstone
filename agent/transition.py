@@ -7,6 +7,7 @@ from core.actions import (
     EXPLOIT_UPLOAD,
     READ_SENSITIVE_FILE,
     USE_CREDS_SSH,
+    BRUTEFORCE_SSH,
 )
 from core.state import State, Credential
 
@@ -19,6 +20,7 @@ ACTION_COSTS = {
     EXPLOIT_UPLOAD: 3,
     READ_SENSITIVE_FILE: 1,
     USE_CREDS_SSH: 2,
+    BRUTEFORCE_SSH: 15,
 }
 
 
@@ -112,6 +114,16 @@ def apply_action(state: State, action: Action, scenario: dict) -> State | None:
                 if not already_known:
                     new_state.creds_found.append(credential)
 
+    elif action.name == BRUTEFORCE_SSH:
+        services = new_state.discovered_services.get(host_id, {})
+        if 22 not in services or services[22] != "ssh":
+            return None
+        if host_id in new_state.compromised_hosts:
+            return None
+
+        new_state.access_levels[host_id] = "ssh_user"
+        new_state.compromised_hosts.add(host_id)
+
     elif action.name == USE_CREDS_SSH:
         if not new_state.has_creds_for_access("ssh"):
             return None
@@ -127,8 +139,26 @@ def apply_action(state: State, action: Action, scenario: dict) -> State | None:
         return None
 
     new_state.actions_taken.append(str(action))
-    new_state.total_cost += ACTION_COSTS.get(action.name, 0)
+    new_state.total_cost += _action_cost(action, host)
     return new_state
+
+
+SEVERITY_MULTIPLIER = {"low": 1.5, "medium": 1.0, "high": 0.7, "critical": 0.5}
+
+
+def _action_cost(action: Action, host: dict) -> int:
+    base = ACTION_COSTS.get(action.name, 0)
+
+    if action.name == EXPLOIT_UPLOAD:
+        vuln = next(
+            (v for v in host.get("vulnerabilities", []) if v["id"] == "VF-UPLOAD-001"),
+            None,
+        )
+        if vuln:
+            mult = SEVERITY_MULTIPLIER.get(vuln.get("severity", "medium"), 1.0)
+            return max(1, round(base * mult))
+
+    return base
 
 
 def _get_host_by_id(scenario: dict, host_id: str) -> dict | None:

@@ -8,6 +8,7 @@ IDENTIFY_VULNERABILITY = "identify_vulnerability"
 EXPLOIT_UPLOAD = "exploit_upload"
 READ_SENSITIVE_FILE = "read_sensitive_file"
 USE_CREDS_SSH = "use_credentials_ssh"
+BRUTEFORCE_SSH = "bruteforce_ssh"
 
 
 @dataclass(frozen=True)
