@@ -1,9 +1,47 @@
 {
   "hosts": [
     {
-      "ip": "10.0.0.1",
-      "ports": [22, 80],
-      "vulnerabilities": ["weak_ssh_password"]
+      "id": "web01",
+      "hostname": "VF-VM1-Web01",
+      "ip": "192.168.56.10",
+      "role": "public_web_server",
+      "value": 40,
+      "services": [
+        {
+          "port": 22,
+          "name": "ssh",
+          "version": "OpenSSH 8.9"
+        },
+        {
+          "port": 80,
+          "name": "http",
+          "version": "Apache 2.4.x",
+          "application": "Acme Intranet Login Portal",
+          "paths": ["/", "/login", "/admin", "/uploads"]
+        }
+      ],
+      "vulnerabilities": [
+        {
+          "id": "VF-UPLOAD-001",
+          "name": "Unrestricted File Upload",
+          "service": "http",
+          "severity": "high",
+          "cost": 3,
+          "requires": ["/admin"],
+          "gives": ["web_shell", "file_access"]
+        }
+      ],
+      "loot": [
+        {
+          "type": "credential",
+          "source": "config.php",
+          "username": "webadmin",
+          "password": "Welcome123!",
+          "access": "ssh",
+          "privilege": "user",
+          "confidence": "high"
+        }
+      ]
     }
   ]
 }
