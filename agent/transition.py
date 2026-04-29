@@ -8,6 +8,11 @@ from core.actions import (
     READ_SENSITIVE_FILE,
     USE_CREDS_SSH,
     BRUTEFORCE_SSH,
+    PIVOT_TO_HOST,
+    ENUM_SMB,
+    READ_SMB_SHARE,
+    EXPLOIT_JENKINS,
+    BRUTEFORCE_RDP,
 )
 from core.state import State, Credential
 
@@ -21,6 +26,11 @@ ACTION_COSTS = {
     READ_SENSITIVE_FILE: 1,
     USE_CREDS_SSH: 2,
     BRUTEFORCE_SSH: 15,
+    PIVOT_TO_HOST: 2,
+    ENUM_SMB: 2,
+    READ_SMB_SHARE: 1,
+    EXPLOIT_JENKINS: 4,
+    BRUTEFORCE_RDP: 12,
 }
 
 
@@ -34,6 +44,8 @@ def apply_action(state: State, action: Action, scenario: dict) -> State | None:
 
     if action.name == DISCOVER_HOST:
         if host_id in new_state.discovered_hosts:
+            return None
+        if host_id not in new_state.reachable_hosts:
             return None
 
         new_state.discovered_hosts.add(host_id)
@@ -55,14 +67,15 @@ def apply_action(state: State, action: Action, scenario: dict) -> State | None:
         if host_id not in new_state.scanned_hosts:
             return None
 
+        port = action.target_port if action.target_port is not None else 80
         services = new_state.discovered_services.get(host_id, {})
-        if 80 not in services or services[80] != "http":
+        if port not in services or services[port] != "http":
             return None
 
         if host_id not in new_state.discovered_paths:
             new_state.discovered_paths[host_id] = set()
 
-        http_service = _get_service_by_port(host, 80)
+        http_service = _get_service_by_port(host, port)
         if http_service is None:
             return None
 
@@ -70,16 +83,31 @@ def apply_action(state: State, action: Action, scenario: dict) -> State | None:
             new_state.discovered_paths[host_id].add(path)
 
     elif action.name == IDENTIFY_VULNERABILITY:
-        if host_id not in new_state.discovered_paths:
-            return None
-        if "/admin" not in new_state.discovered_paths[host_id]:
-            return None
+        paths = new_state.discovered_paths.get(host_id, set())
 
         if host_id not in new_state.discovered_vulns:
             new_state.discovered_vulns[host_id] = set()
 
+        added = False
         for vuln in host.get("vulnerabilities", []):
-            new_state.discovered_vulns[host_id].add(vuln["id"])
+            requires = vuln.get("requires", [])
+            satisfied = True
+            for req in requires:
+                if req.startswith("credential:"):
+                    username = req.split(":", 1)[1]
+                    if not any(c.username == username for c in new_state.creds_found):
+                        satisfied = False
+                        break
+                elif req not in paths:
+                    satisfied = False
+                    break
+            if satisfied:
+                if vuln["id"] not in new_state.discovered_vulns[host_id]:
+                    added = True
+                new_state.discovered_vulns[host_id].add(vuln["id"])
+
+        if not added:
+            return None
 
     elif action.name == EXPLOIT_UPLOAD:
         if host_id not in new_state.discovered_vulns:
@@ -94,25 +122,11 @@ def apply_action(state: State, action: Action, scenario: dict) -> State | None:
             return None
 
         for loot in host.get("loot", []):
-            if loot.get("type") == "credential":
-                credential = Credential(
-                    username=loot["username"],
-                    password=loot["password"],
-                    access=loot["access"],
-                    privilege=loot["privilege"],
-                    source=loot["source"],
-                    confidence=loot["confidence"],
-                )
-
-                already_known = any(
-                    c.username == credential.username
-                    and c.password == credential.password
-                    and c.access == credential.access
-                    for c in new_state.creds_found
-                )
-
-                if not already_known:
-                    new_state.creds_found.append(credential)
+            if loot.get("type") != "credential":
+                continue
+            if loot.get("source", "").startswith("smb://"):
+                continue
+            _add_credential(new_state, loot)
 
     elif action.name == BRUTEFORCE_SSH:
         services = new_state.discovered_services.get(host_id, {})
@@ -135,10 +149,65 @@ def apply_action(state: State, action: Action, scenario: dict) -> State | None:
         new_state.access_levels[host_id] = "ssh_user"
         new_state.compromised_hosts.add(host_id)
 
+    elif action.name == PIVOT_TO_HOST:
+        sources = [
+            h for h in scenario.get("hosts", [])
+            if h["id"] in new_state.compromised_hosts
+            and host_id in h.get("reaches", [])
+        ]
+        if not sources:
+            return None
+        if host_id in new_state.reachable_hosts:
+            return None
+
+        new_state.reachable_hosts.add(host_id)
+
+    elif action.name == ENUM_SMB:
+        if host_id not in new_state.scanned_hosts:
+            return None
+        services = new_state.discovered_services.get(host_id, {})
+        if 445 not in services or services[445] != "smb":
+            return None
+        if host_id in new_state.discovered_paths and "smb://shares" in new_state.discovered_paths[host_id]:
+            return None
+
+        if host_id not in new_state.discovered_paths:
+            new_state.discovered_paths[host_id] = set()
+        new_state.discovered_paths[host_id].add("smb://shares")
+
+    elif action.name == READ_SMB_SHARE:
+        paths = new_state.discovered_paths.get(host_id, set())
+        if "smb://shares" not in paths:
+            return None
+
+        for loot in host.get("loot", []):
+            if loot.get("type") == "credential" and loot.get("source", "").startswith("smb://"):
+                _add_credential(new_state, loot)
+
+    elif action.name == EXPLOIT_JENKINS:
+        if host_id not in new_state.discovered_vulns:
+            return None
+        if "VF-JENKINS-001" not in new_state.discovered_vulns[host_id]:
+            return None
+        if new_state.get_access_level(host_id) in ("web_shell", "ssh_user"):
+            return None
+
+        new_state.access_levels[host_id] = "web_shell"
+
+    elif action.name == BRUTEFORCE_RDP:
+        services = new_state.discovered_services.get(host_id, {})
+        if 3389 not in services or services[3389] != "rdp":
+            return None
+        if host_id in new_state.compromised_hosts:
+            return None
+
+        new_state.access_levels[host_id] = "rdp_user"
+        new_state.compromised_hosts.add(host_id)
+
     else:
         return None
 
-    new_state.actions_taken.append(str(action))
+    new_state.actions_taken.append(action)
     new_state.total_cost += _action_cost(action, host)
     return new_state
 
@@ -159,6 +228,25 @@ def _action_cost(action: Action, host: dict) -> int:
             return max(1, round(base * mult))
 
     return base
+
+
+def _add_credential(state: State, loot: dict) -> None:
+    credential = Credential(
+        username=loot["username"],
+        password=loot["password"],
+        access=loot["access"],
+        privilege=loot["privilege"],
+        source=loot["source"],
+        confidence=loot["confidence"],
+    )
+    already_known = any(
+        c.username == credential.username
+        and c.password == credential.password
+        and c.access == credential.access
+        for c in state.creds_found
+    )
+    if not already_known:
+        state.creds_found.append(credential)
 
 
 def _get_host_by_id(scenario: dict, host_id: str) -> dict | None:

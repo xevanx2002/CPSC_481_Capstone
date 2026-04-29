@@ -21,7 +21,11 @@ def is_goal(state: State, scenario: dict) -> bool:
 
 
 def plan(scenario: dict, start: Optional[State] = None) -> Optional[State]:
-    start = start or State()
+    if start is None:
+        start = State()
+        for host in scenario.get("hosts", []):
+            if host.get("exposure", "external") == "external":
+                start.reachable_hosts.add(host["id"])
 
     if is_goal(start, scenario):
         return start

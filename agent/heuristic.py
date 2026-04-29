@@ -2,6 +2,7 @@ from core.state import State
 
 
 SUBGOAL_COSTS = {
+    "reachable": 2,
     "discovered": 1,
     "scanned": 1,
     "http_enumerated": 2,
@@ -21,6 +22,8 @@ def heuristic(state: State, scenario: dict) -> int:
         if host_id in state.compromised_hosts:
             continue
 
+        if host_id not in state.reachable_hosts:
+            remaining += SUBGOAL_COSTS["reachable"]
         if host_id not in state.discovered_hosts:
             remaining += SUBGOAL_COSTS["discovered"]
         if host_id not in state.scanned_hosts:
