@@ -1,5 +1,8 @@
 from dataclasses import dataclass, field
-from typing import Dict, List, Set
+from typing import TYPE_CHECKING, Dict, List, Set
+
+if TYPE_CHECKING:
+    from core.actions import Action
 
 
 @dataclass
@@ -14,6 +17,7 @@ class Credential:
 
 @dataclass
 class State:
+    reachable_hosts: Set[str] = field(default_factory=set)
     discovered_hosts: Set[str] = field(default_factory=set)
     scanned_hosts: Set[str] = field(default_factory=set)
 
@@ -28,11 +32,12 @@ class State:
 
     creds_found: List[Credential] = field(default_factory=list)
 
-    actions_taken: List[str] = field(default_factory=list)
+    actions_taken: List["Action"] = field(default_factory=list)
     total_cost: int = 0
 
     def clone(self) -> "State":
         return State(
+            reachable_hosts=set(self.reachable_hosts),
             discovered_hosts=set(self.discovered_hosts),
             scanned_hosts=set(self.scanned_hosts),
             open_ports={host: ports[:] for host, ports in self.open_ports.items()},
@@ -60,6 +65,7 @@ class State:
 
     def signature(self) -> tuple:
         return (
+            frozenset(self.reachable_hosts),
             frozenset(self.discovered_hosts),
             frozenset(self.scanned_hosts),
             frozenset(

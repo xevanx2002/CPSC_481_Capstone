@@ -1,63 +1,97 @@
 {
-    "hosts": [
+  "hosts": [
+    {
+      "id": "web01",
+      "hostname": "VF-VM1-Web01",
+      "ip": "192.168.56.10",
+      "role": "public_web_server",
+      "value": 40,
+      "exposure": "external",
+      "services": [
+        { "port": 22, "name": "ssh", "version": "OpenSSH 8.9" },
         {
-            "id": "web01",
-            "hostname": "VF-Web01",
-            "ip": "192.168.56.10",
-            "role": "public_web_server",
-            "value": 40,
-            "services": [
-                {
-                    "port": 22,
-                    "name": "ssh",
-                    "version": "OpenSSH 8.9"
-                },
-                {
-                    "port": 80,
-                    "name": "http",
-                    "version": "Apache 2.4.x",
-                    "application": "Company Portal",
-                    "paths": ["/", "/login", "/admin", "/uploads"]
-                }
-            ],
-            "vulnerabilities": [
-                {
-                    "id": "VF-UPLOAD-001",
-                    "name": "Unrestricted File Upload",
-                    "service": "http",
-                    "severity": "high",
-                    "cost": 3,
-                    "requires": ["/admin"],
-                    "gives": ["web_shell", "file_access"]
-                }
-            ],
-            "loot": [
-                {
-                    "type": "credential",
-                    "source": "config.php",
-                    "username": "webadmin",
-                    "password": "Welcome123!",
-                    "access": "ssh",
-                    "privilege": "user",
-                    "confidence": "high"
-                }
-            ]
+          "port": 80,
+          "name": "http",
+          "version": "Apache 2.4.x",
+          "application": "Acme Intranet Login Portal",
+          "paths": ["/", "/login", "/admin", "/uploads"]
+        }
+      ],
+      "vulnerabilities": [
+        {
+          "id": "VF-UPLOAD-001",
+          "name": "Unrestricted File Upload",
+          "service": "http",
+          "severity": "high",
+          "cost": 3,
+          "requires": ["/admin"],
+          "gives": ["web_shell", "file_access"]
+        }
+      ],
+      "loot": [
+        {
+          "type": "credential",
+          "source": "config.php",
+          "username": "webadmin",
+          "password": "Welcome123!",
+          "access": "ssh",
+          "privilege": "user",
+          "confidence": "high"
+        }
+      ],
+      "reaches": ["file02"]
+    },
+    {
+      "id": "file02",
+      "hostname": "VF-VM2-File02",
+      "ip": "192.168.56.20",
+      "role": "internal_file_server",
+      "value": 60,
+      "exposure": "internal",
+      "services": [
+        { "port": 22, "name": "ssh", "version": "OpenSSH 8.2" },
+        { "port": 445, "name": "smb", "version": "Samba 4.13" },
+        { "port": 3389, "name": "rdp", "version": "xrdp 0.9" },
+        {
+          "port": 8080,
+          "name": "http",
+          "version": "Jenkins 2.289",
+          "application": "Jenkins Admin Panel",
+          "paths": ["/", "/login", "/script", "/manage"]
+        }
+      ],
+      "vulnerabilities": [
+        {
+          "id": "VF-JENKINS-001",
+          "name": "Jenkins Default Credentials + Script Console RCE",
+          "service": "http",
+          "severity": "high",
+          "cost": 4,
+          "requires": ["/script"],
+          "gives": ["web_shell", "file_access"]
         },
         {
-            "id": "db01",
-            "hostname": "VF-DB01",
-            "ip": "192.168.56.20",
-            "role": "database_server",
-            "value": 70,
-            "services": [
-                {
-                    "port": 22,
-                    "name": "ssh",
-                    "version": "OpenSSH 8.9"
-                }
-            ],
-            "vulnerabilities": [],
-            "loot": []
+          "id": "VF-REUSE-001",
+          "name": "Reused SSH Credentials",
+          "service": "ssh",
+          "severity": "medium",
+          "cost": 1,
+          "requires": ["credential:webadmin"],
+          "gives": ["ssh_user"]
         }
-    ]
+      ],
+      "loot": [
+        {
+          "type": "credential",
+          "source": "/etc/secrets/db.conf",
+          "username": "dbadmin",
+          "password": "Db@dminPass!",
+          "access": "ssh",
+          "privilege": "user",
+          "confidence": "high"
+        }
+      ],
+      "reaches": []
+    }
+  ]
 }
