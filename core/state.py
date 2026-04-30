@@ -42,7 +42,8 @@ class State:
             scanned_hosts=set(self.scanned_hosts),
             open_ports={host: ports[:] for host, ports in self.open_ports.items()},
             discovered_services={
-                host: services.copy() for host, services in self.discovered_services.items()
+                host: services.copy()
+                for host, services in self.discovered_services.items()
             },
             discovered_paths={
                 host: set(paths) for host, paths in self.discovered_paths.items()
@@ -90,7 +91,5 @@ class State:
             ),
             frozenset(self.access_levels.items()),
             frozenset(self.compromised_hosts),
-            frozenset(
-                (c.username, c.password, c.access) for c in self.creds_found
-            ),
+            frozenset((c.username, c.password, c.access) for c in self.creds_found),
         )

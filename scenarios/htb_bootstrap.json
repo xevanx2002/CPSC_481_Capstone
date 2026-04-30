@@ -1,0 +1,12 @@
+{
+  "mode": "discover",
+  "description": "Bootstrap scenario for unknown infrastructure (HackTheBox beginner box). Only the entry-point IP is known; the agent discovers services, paths, vulnerabilities, and loot at runtime via real executors. Vulnerability matching is delegated to the generic knowledge base, not declared per-scenario.",
+  "hosts": [
+    {
+      "id": "target",
+      "ip": "REPLACE_WITH_HTB_IP",
+      "exposure": "external"
+    }
+  ],
+  "goal": { "type": "compromise_any" }
+}

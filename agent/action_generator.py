@@ -13,8 +13,12 @@ from core.actions import (
     READ_SMB_SHARE,
     EXPLOIT_JENKINS,
     BRUTEFORCE_RDP,
+    TRY_DEFAULT_CREDS,
 )
+
+ADMIN_PATH_HINTS = ("/admin", "/login", "/manage", "/wp-admin", "/console")
 from core.state import State
+from knowledge import vuln_requirements_met, vulns_for
 
 
 def legal_actions(state: State, scenario: dict) -> list[Action]:
@@ -37,22 +41,32 @@ def legal_actions(state: State, scenario: dict) -> list[Action]:
         services = state.discovered_services.get(host_id, {})
         paths = state.discovered_paths.get(host_id, set())
         known_vulns = state.discovered_vulns.get(host_id, set())
-        host_vuln_ids = {v["id"] for v in host.get("vulnerabilities", [])}
+        candidate_vulns = vulns_for(host, state)
+        host_vuln_ids = {v["id"] for v in candidate_vulns}
 
         for port, name in services.items():
             if name == "http" and not _http_port_enumerated(host, port, paths):
                 actions.append(Action(ENUM_HTTP, host_id, port))
 
+            if (
+                name == "http"
+                and any(hint in path for hint in ADMIN_PATH_HINTS for path in paths)
+                and not state.has_creds_for_access("http")
+            ):
+                actions.append(Action(TRY_DEFAULT_CREDS, host_id, port))
+
         if services.get(445) == "smb" and "smb://shares" not in paths:
             actions.append(Action(ENUM_SMB, host_id, 445))
 
-        if "smb://shares" in paths and not _all_loot_collected(state, host, source_prefix="smb://"):
+        if "smb://shares" in paths and not _all_loot_collected(
+            state, host, source_prefix="smb://"
+        ):
             actions.append(Action(READ_SMB_SHARE, host_id, 445))
 
         if (
             host_vuln_ids
             and not host_vuln_ids.issubset(known_vulns)
-            and _any_vuln_requirements_met(host, paths)
+            and _any_vuln_requirements_met(candidate_vulns, paths, state)
         ):
             actions.append(Action(IDENTIFY_VULNERABILITY, host_id))
 
@@ -70,11 +84,17 @@ def legal_actions(state: State, scenario: dict) -> list[Action]:
         ):
             actions.append(Action(EXPLOIT_JENKINS, host_id))
 
-        if state.get_access_level(host_id) == "web_shell" and any(
-            loot.get("type") == "credential"
-            and not loot.get("source", "").startswith("smb://")
-            for loot in host.get("loot", [])
-        ) and not _all_loot_collected(state, host, source_prefix=None, exclude_smb=True):
+        if (
+            state.get_access_level(host_id) == "web_shell"
+            and any(
+                loot.get("type") == "credential"
+                and not loot.get("source", "").startswith("smb://")
+                for loot in host.get("loot", [])
+            )
+            and not _all_loot_collected(
+                state, host, source_prefix=None, exclude_smb=True
+            )
+        ):
             actions.append(Action(READ_SENSITIVE_FILE, host_id))
 
         if (
@@ -95,7 +115,8 @@ def legal_actions(state: State, scenario: dict) -> list[Action]:
         if host_id in state.reachable_hosts:
             continue
         sources = [
-            h for h in scenario.get("hosts", [])
+            h
+            for h in scenario.get("hosts", [])
             if h["id"] in state.compromised_hosts and host_id in h.get("reaches", [])
         ]
         if sources:
@@ -112,16 +133,15 @@ def _http_port_enumerated(host: dict, port: int, paths: set) -> bool:
     return expected.issubset(paths) if expected else True
 
 
-def _any_vuln_requirements_met(host: dict, paths: set) -> bool:
-    for vuln in host.get("vulnerabilities", []):
-        requires = vuln.get("requires", [])
-        if all(req.startswith("credential:") or req in paths for req in requires):
-            return True
-    return False
+def _any_vuln_requirements_met(vulns: list[dict], paths: set, state: State) -> bool:
+    return any(vuln_requirements_met(v, paths, state) for v in vulns)
 
 
 def _all_loot_collected(
-    state: State, host: dict, source_prefix: str | None = None, exclude_smb: bool = False
+    state: State,
+    host: dict,
+    source_prefix: str | None = None,
+    exclude_smb: bool = False,
 ) -> bool:
     for loot in host.get("loot", []):
         if loot.get("type") != "credential":

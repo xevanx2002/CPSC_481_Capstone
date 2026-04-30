@@ -20,7 +20,11 @@ def is_goal(state: State, scenario: dict) -> bool:
     return target_hosts.issubset(state.compromised_hosts)
 
 
-def plan(scenario: dict, start: Optional[State] = None) -> Optional[State]:
+def plan(
+    scenario: dict,
+    start: Optional[State] = None,
+    excluded_actions: Optional[set] = None,
+) -> Optional[State]:
     if start is None:
         start = State()
         for host in scenario.get("hosts", []):
@@ -29,6 +33,8 @@ def plan(scenario: dict, start: Optional[State] = None) -> Optional[State]:
 
     if is_goal(start, scenario):
         return start
+
+    excluded = excluded_actions or set()
 
     counter = 0
     frontier: list[_Node] = []
@@ -51,6 +57,8 @@ def plan(scenario: dict, start: Optional[State] = None) -> Optional[State]:
             continue
 
         for action in legal_actions(state, scenario):
+            if action in excluded:
+                continue
             child = apply_action(state, action, scenario)
             if child is None:
                 continue

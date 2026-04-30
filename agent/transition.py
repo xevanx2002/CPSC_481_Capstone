@@ -13,8 +13,10 @@ from core.actions import (
     READ_SMB_SHARE,
     EXPLOIT_JENKINS,
     BRUTEFORCE_RDP,
+    TRY_DEFAULT_CREDS,
 )
 from core.state import State, Credential
+from knowledge import vuln_requirements_met, vulns_for
 
 
 ACTION_COSTS = {
@@ -31,6 +33,7 @@ ACTION_COSTS = {
     READ_SMB_SHARE: 1,
     EXPLOIT_JENKINS: 4,
     BRUTEFORCE_RDP: 12,
+    TRY_DEFAULT_CREDS: 2,
 }
 
 
@@ -89,22 +92,12 @@ def apply_action(state: State, action: Action, scenario: dict) -> State | None:
             new_state.discovered_vulns[host_id] = set()
 
         added = False
-        for vuln in host.get("vulnerabilities", []):
-            requires = vuln.get("requires", [])
-            satisfied = True
-            for req in requires:
-                if req.startswith("credential:"):
-                    username = req.split(":", 1)[1]
-                    if not any(c.username == username for c in new_state.creds_found):
-                        satisfied = False
-                        break
-                elif req not in paths:
-                    satisfied = False
-                    break
-            if satisfied:
-                if vuln["id"] not in new_state.discovered_vulns[host_id]:
-                    added = True
-                new_state.discovered_vulns[host_id].add(vuln["id"])
+        for vuln in vulns_for(host, new_state):
+            if not vuln_requirements_met(vuln, paths, new_state):
+                continue
+            if vuln["id"] not in new_state.discovered_vulns[host_id]:
+                added = True
+            new_state.discovered_vulns[host_id].add(vuln["id"])
 
         if not added:
             return None
@@ -193,6 +186,28 @@ def apply_action(state: State, action: Action, scenario: dict) -> State | None:
             return None
 
         new_state.access_levels[host_id] = "web_shell"
+
+    elif action.name == TRY_DEFAULT_CREDS:
+        port = action.target_port
+        services = new_state.discovered_services.get(host_id, {})
+        if port not in services or services[port] != "http":
+            return None
+        if new_state.has_creds_for_access("http"):
+            return None
+
+        added = False
+        for loot in host.get("loot", []):
+            if loot.get("type") != "credential":
+                continue
+            if loot.get("access") != "http":
+                continue
+            before = len(new_state.creds_found)
+            _add_credential(new_state, loot)
+            if len(new_state.creds_found) > before:
+                added = True
+
+        if not added:
+            return None
 
     elif action.name == BRUTEFORCE_RDP:
         services = new_state.discovered_services.get(host_id, {})

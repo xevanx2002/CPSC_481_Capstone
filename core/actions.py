@@ -15,6 +15,7 @@ ENUM_SMB = "enumerate_smb"
 READ_SMB_SHARE = "read_smb_share"
 EXPLOIT_JENKINS = "exploit_jenkins"
 BRUTEFORCE_RDP = "bruteforce_rdp"
+TRY_DEFAULT_CREDS = "try_default_credentials"
 
 # frozen so it's hashable later
 @dataclass(frozen=True)

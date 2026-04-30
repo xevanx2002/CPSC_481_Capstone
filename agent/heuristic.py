@@ -1,6 +1,5 @@
 from core.state import State
 
-
 SUBGOAL_COSTS = {
     "reachable": 2,
     "discovered": 1,
@@ -29,8 +28,12 @@ def heuristic(state: State, scenario: dict) -> int:
         if host_id not in state.scanned_hosts:
             remaining += SUBGOAL_COSTS["scanned"]
 
-        has_http = any(s["port"] == 80 and s["name"] == "http" for s in host.get("services", []))
-        has_ssh = any(s["port"] == 22 and s["name"] == "ssh" for s in host.get("services", []))
+        has_http = any(
+            s["port"] == 80 and s["name"] == "http" for s in host.get("services", [])
+        )
+        has_ssh = any(
+            s["port"] == 22 and s["name"] == "ssh" for s in host.get("services", [])
+        )
         host_vuln_ids = {v["id"] for v in host.get("vulnerabilities", [])}
         known_vulns = state.discovered_vulns.get(host_id, set())
 
