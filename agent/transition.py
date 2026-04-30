@@ -61,9 +61,12 @@ def apply_action(state: State, action: Action, scenario: dict) -> State | None:
             return None
 
         new_state.scanned_hosts.add(host_id)
-        new_state.open_ports[host_id] = [service["port"] for service in host["services"]]
+        # in declared scenarios services are pre-known; in discover mode
+        # they're empty here and get filled by the executor on replan
+        services = host.get("services", [])
+        new_state.open_ports[host_id] = [s["port"] for s in services]
         new_state.discovered_services[host_id] = {
-            service["port"]: service["name"] for service in host["services"]
+            s["port"]: s["name"] for s in services
         }
 
     elif action.name == ENUM_HTTP:
