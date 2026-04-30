@@ -1,6 +1,8 @@
 from core.actions import Action
 from core.state import Credential, State
+from agent.action_generator import legal_actions
 from agent.planner import is_goal, plan
+from agent.transition import ACTION_COSTS
 from executors.base import ExecutionResult, Executor
 
 
@@ -90,14 +92,25 @@ def execute_with_replan(
 
     while not is_goal(runtime, scenario):
         plan_result = plan(scenario, start=runtime, excluded_actions=excluded)
-        if plan_result is None:
-            break
 
-        remaining = plan_result.actions_taken[len(runtime.actions_taken) :]
-        if not remaining:
-            break
+        next_action = None
+        if plan_result is not None:
+            remaining = plan_result.actions_taken[len(runtime.actions_taken) :]
+            if remaining:
+                next_action = remaining[0]
 
-        next_action = remaining[0]
+        if next_action is None:
+            # planner can't see a goal-reaching path. happens in discover mode
+            # before recon populates state, or after enough failures cut off
+            # all known routes. fall back to cheapest legal forward action so
+            # execution still makes progress; next iteration's plan() may find
+            # a real path once observations come in.
+            legal = [
+                a for a in legal_actions(runtime, scenario) if a not in excluded
+            ]
+            if not legal:
+                break
+            next_action = min(legal, key=lambda a: ACTION_COSTS.get(a.name, 99))
         result = executor.execute(next_action, runtime, scenario)
         log.append(result)
 

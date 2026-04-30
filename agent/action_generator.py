@@ -127,8 +127,10 @@ def legal_actions(state: State, scenario: dict) -> list[Action]:
 
 def _http_port_enumerated(host: dict, port: int, paths: set) -> bool:
     service = next((s for s in host.get("services", []) if s["port"] == port), None)
-    if not service:
-        return True
+    if service is None:
+        # discover mode — no scenario data. consider enumerated only once
+        # we've actually populated paths via execution
+        return bool(paths)
     expected = set(service.get("paths", []))
     return expected.issubset(paths) if expected else True
 
