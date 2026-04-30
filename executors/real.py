@@ -17,7 +17,7 @@ import requests
 from core.actions import Action
 from core.state import State
 from executors.base import ExecutionResult
-from knowledge import recipe_for
+from knowledge import recipe_for, vuln_reqs_met, vulns_for
 
 
 _NMAP_PORT_RE = re.compile(r"^(\d+)/tcp\s+open\s+(\S+)(?:\s+(.+))?$", re.MULTILINE)
@@ -270,6 +270,21 @@ class RealExecutor:
             observed={"paths": found},
             raw="\n".join(log_lines),
         )
+
+    def _do_identify_vuln(self, action, state, scenario):
+        # pure logic — no I/O. matches observed state against the KB.
+        host = self._host(scenario, action.target_host)
+        if host is None:
+            return ExecutionResult(action, False, error="host_unknown")
+        host_paths = state.discovered_paths.get(action.target_host, set())
+        matched = [
+            v["id"]
+            for v in vulns_for(host, state)
+            if vuln_reqs_met(v, host_paths, state)
+        ]
+        if not matched:
+            return ExecutionResult(action, False, error="no_vulns_identified")
+        return ExecutionResult(action, True, observed={"vulns": matched})
 
     def _do_try_default_creds(self, action, state, scenario):
         host = self._host(scenario, action.target_host)
