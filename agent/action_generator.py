@@ -3,7 +3,7 @@ from core.actions import (
     DISCOVER_HOST,
     SCAN_HOST,
     ENUM_HTTP,
-    IDENTIFY_VULNERABILITY,
+    IDENTIFY_VULN,
     EXPLOIT_UPLOAD,
     READ_SENSITIVE_FILE,
     USE_CREDS_SSH,
@@ -18,7 +18,7 @@ from core.actions import (
 
 ADMIN_PATH_HINTS = ("/admin", "/login", "/manage", "/wp-admin", "/console")
 from core.state import State
-from knowledge import vuln_requirements_met, vulns_for
+from knowledge import vuln_reqs_met, vulns_for
 
 
 def legal_actions(state: State, scenario: dict) -> list[Action]:
@@ -66,9 +66,9 @@ def legal_actions(state: State, scenario: dict) -> list[Action]:
         if (
             host_vuln_ids
             and not host_vuln_ids.issubset(known_vulns)
-            and _any_vuln_requirements_met(candidate_vulns, paths, state)
+            and _any_vuln_reqs_met(candidate_vulns, paths, state)
         ):
-            actions.append(Action(IDENTIFY_VULNERABILITY, host_id))
+            actions.append(Action(IDENTIFY_VULN, host_id))
 
         if (
             "VF-UPLOAD-001" in known_vulns
@@ -133,8 +133,8 @@ def _http_port_enumerated(host: dict, port: int, paths: set) -> bool:
     return expected.issubset(paths) if expected else True
 
 
-def _any_vuln_requirements_met(vulns: list[dict], paths: set, state: State) -> bool:
-    return any(vuln_requirements_met(v, paths, state) for v in vulns)
+def _any_vuln_reqs_met(vulns: list[dict], paths: set, state: State) -> bool:
+    return any(vuln_reqs_met(v, paths, state) for v in vulns)
 
 
 def _all_loot_collected(

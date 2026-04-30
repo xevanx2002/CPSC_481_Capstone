@@ -53,7 +53,7 @@ All actions target VMs the team owns (CSUF AWS account `csuf-cpsc362-group2`, us
 - **Failure modes**: SMB requires auth, no shares listable anonymously. `success=False, error="smb_enum_failed"`.
 - **Target VM** (`file02`): Samba configured with at least one anonymous-listable share. Build script must `apt install samba` and add a `[shares]` section in `smb.conf` with `guest ok = yes`.
 
-### 5. `identify_vulnerability(host_id)`
+### 5. `identify_vuln(host_id)`
 - **Real op**: heuristic — match observed service banners (from `discovered_services` versions) and discovered paths against a small CVE/vuln knowledge base. Examples:
   - Apache 2.4.x + `/admin` returning an upload form → `VF-UPLOAD-001`
   - Jenkins 2.289 + `/script` reachable → `VF-JENKINS-001`

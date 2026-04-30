@@ -3,7 +3,7 @@ from core.actions import (
     DISCOVER_HOST,
     SCAN_HOST,
     ENUM_HTTP,
-    IDENTIFY_VULNERABILITY,
+    IDENTIFY_VULN,
     EXPLOIT_UPLOAD,
     READ_SENSITIVE_FILE,
     USE_CREDS_SSH,
@@ -16,14 +16,14 @@ from core.actions import (
     TRY_DEFAULT_CREDS,
 )
 from core.state import State, Credential
-from knowledge import vuln_requirements_met, vulns_for
+from knowledge import vuln_reqs_met, vulns_for
 
 
 ACTION_COSTS = {
     DISCOVER_HOST: 1,
     SCAN_HOST: 1,
     ENUM_HTTP: 2,
-    IDENTIFY_VULNERABILITY: 2,
+    IDENTIFY_VULN: 2,
     EXPLOIT_UPLOAD: 3,
     READ_SENSITIVE_FILE: 1,
     USE_CREDS_SSH: 2,
@@ -85,7 +85,7 @@ def apply_action(state: State, action: Action, scenario: dict) -> State | None:
         for path in http_service.get("paths", []):
             new_state.discovered_paths[host_id].add(path)
 
-    elif action.name == IDENTIFY_VULNERABILITY:
+    elif action.name == IDENTIFY_VULN:
         paths = new_state.discovered_paths.get(host_id, set())
 
         if host_id not in new_state.discovered_vulns:
@@ -93,7 +93,7 @@ def apply_action(state: State, action: Action, scenario: dict) -> State | None:
 
         added = False
         for vuln in vulns_for(host, new_state):
-            if not vuln_requirements_met(vuln, paths, new_state):
+            if not vuln_reqs_met(vuln, paths, new_state):
                 continue
             if vuln["id"] not in new_state.discovered_vulns[host_id]:
                 added = True

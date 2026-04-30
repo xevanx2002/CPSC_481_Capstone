@@ -26,3 +26,27 @@ def print_report(scenario: dict, result, score: int):
     print("Action Sequence: ")
     for i, action in enumerate(result.actions_taken, 1):
         print(f"{i}. {action}")
+
+
+def print_live_report(scenario: dict, runtime_state, log, score: int):
+    print("VectorForge Live Run Report")
+    print()
+
+    print(f"Compromised Hosts: {sorted(runtime_state.compromised_hosts)}")
+    print(f"Credentials Found: {len(runtime_state.creds_found)}")
+    print(f"Final Score: {score}")
+    print()
+
+    print("Per-action results:")
+    for i, entry in enumerate(log, 1):
+        tag = "OK" if entry.success else f"FAIL({entry.error})"
+        print(f"{i:>2}. [{tag}] {entry.action}")
+
+    print()
+    print("Raw output (per failed action):")
+    for entry in log:
+        if entry.success or not entry.raw:
+            continue
+        print(f"--- {entry.action} ---")
+        print(entry.raw)
+        print()

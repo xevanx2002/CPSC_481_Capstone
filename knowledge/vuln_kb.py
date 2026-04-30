@@ -29,10 +29,21 @@ RULES: list[dict] = [
         "cost": 3,
         "requires": ["/admin", "credential:admin"],
         "gives": ["web_shell", "file_access"],
-        "predicate": lambda host, state: (
-            _path_contains(state, host["id"], "nibbleblog")
-            and state.has_creds_for_access("http")
+        # match as soon as the app is recognized (path signal). cred requirement
+        # is enforced separately via `requires` so try_default_creds can fetch
+        # its recipe before any creds exist
+        "predicate": lambda host, state: _path_contains(
+            state, host["id"], "nibbleblog"
         ),
+        # exploit recipe — consumed by real executors when this vuln matches
+        "default_credentials": ("admin", "nibbles"),
+        "login_endpoint": "/nibbleblog/admin.php",
+        "login_payload_keys": ("username", "password"),
+        "login_success_indicator": "logout",  # substring expected in response on success
+        "upload_endpoint": "/nibbleblog/admin.php?controller=plugins&action=config&plugin=my_image",
+        "upload_field_name": "image",
+        "shell_path_after_upload": "/nibbleblog/content/private/plugins/my_image/image.php",
+        "loot_files": ["/var/www/html/nibbleblog/content/private/users.xml"],
     },
     {
         "id": "VF-JENKINS-001",
@@ -46,6 +57,9 @@ RULES: list[dict] = [
             _path_contains(state, host["id"], "/script")
             and _service_banner_contains(state, host["id"], "jenkins")
         ),
+        "default_credentials": ("admin", "admin"),
+        "groovy_endpoint": "/script",
+        "loot_files": [],
     },
 ]
 
@@ -68,7 +82,7 @@ def match_kb(host: dict, state: State) -> list[dict]:
     return [_strip_predicate(rule) for rule in RULES if rule["predicate"](host, state)]
 
 
-def vuln_requirements_met(vuln: dict, paths: set, state: State) -> bool:
+def vuln_reqs_met(vuln: dict, paths: set, state: State) -> bool:
     """Check vuln 'requires' list against observed paths and creds.
 
     Path requirements use substring matching so a generic hint like "/admin"
@@ -95,3 +109,17 @@ def vulns_for(host: dict, state: State) -> list[dict]:
     declared_ids = {v["id"] for v in declared}
     matched = [v for v in match_kb(host, state) if v["id"] not in declared_ids]
     return declared + matched
+
+
+def recipe_for(host: dict, state: State, capability: str) -> dict | None:
+    """Return the first matched vuln on this host whose `gives` includes capability.
+
+    Real executors call this to fetch app-specific exploit data (login URLs,
+    upload endpoints, default creds, loot file paths). Returns None if no
+    matched vuln offers the capability — caller should treat that as a recipe
+    miss and fail with error='recipe_missing'.
+    """
+    for vuln in vulns_for(host, state):
+        if capability in vuln.get("gives", []):
+            return vuln
+    return None

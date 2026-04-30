@@ -1,7 +1,7 @@
 from core.actions import Action
 from core.state import State
 from executors.base import ExecutionResult
-from knowledge import vuln_requirements_met, vulns_for
+from knowledge import vuln_reqs_met, vulns_for
 
 
 def _find_host(scenario: dict, host_id: str) -> dict | None:
@@ -85,7 +85,7 @@ class MockExecutor:
                 )
         return ExecutionResult(action, False, error="smb_enum_failed")
 
-    def _do_identify_vulnerability(self, action, state, scenario):
+    def _do_identify_vuln(self, action, state, scenario):
         host = _find_host(scenario, action.target_host)
         if host is None:
             return ExecutionResult(action, False, error="host_unknown")
@@ -93,7 +93,7 @@ class MockExecutor:
         matched = [
             v["id"]
             for v in vulns_for(host, state)
-            if vuln_requirements_met(v, host_paths, state)
+            if vuln_reqs_met(v, host_paths, state)
         ]
         if not matched:
             return ExecutionResult(action, False, error="no_vulns_identified")
@@ -172,7 +172,7 @@ class MockExecutor:
             observed={"access_level": "rdp_user", "compromised": True},
         )
 
-    def _do_try_default_credentials(self, action, state, scenario):
+    def _do_try_default_creds(self, action, state, scenario):
         host = _find_host(scenario, action.target_host)
         if host is None:
             return ExecutionResult(action, False, error="host_unknown")
