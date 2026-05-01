@@ -1,6 +1,6 @@
 {
   "mode": "discover",
-  "description": "Bootstrap scenario for unknown infrastructure (HackTheBox beginner box). Only the entry-point IP is known; the agent discovers services, paths, vulnerabilities, and loot at runtime via real executors. Vulnerability matching is delegated to the generic knowledge base, not declared per-scenario.",
+  "description": "Bootstrap scenario for unknown infrastructure (HackTheBox beginner box). Only the entry-point IP is known; the agent discovers services, paths, vulnerabilities, and loot at runtime via real executors. Vulnerability matching is handled by the generic knowledge base, not declared per-scenario.",
   "hosts": [
     {
       "id": "target",

@@ -37,7 +37,9 @@ def test_medium_plan_pivots_to_internal_host(medium_scenario):
 
 
 def test_medium_plan_prefers_credential_reuse_over_jenkins(medium_scenario):
-    """Reusing webadmin's SSH creds (cost 1) is cheaper than exploiting Jenkins (cost ~3)."""
+    """
+    Reusing webadmins SSH creds (cost 1) is cheaper than exploiting Jenkins (cost ~3).
+    """
     result = plan(medium_scenario)
     assert Action(USE_CREDS_SSH, "file02", 22) in result.actions_taken
     assert Action(EXPLOIT_JENKINS, "file02") not in result.actions_taken

@@ -4,10 +4,11 @@ from executors.base import ExecutionResult, Executor
 
 
 class HybridExecutor:
-    """Try `primary` first; on `not_implemented` errors fall back to `fallback`.
+    """
+    Try `primary` first on `not_implemented` errors fall back to `fallback`
 
     Lets the agent run end-to-end against a real target even when only a few
-    actions have real backends — e.g. real nmap for recon, mock for everything
+    actions have real backends like with real nmap for recon, mock for everything
     downstream during a dry-run.
     """
 

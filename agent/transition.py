@@ -18,7 +18,10 @@ from core.actions import (
 from core.state import State, Credential
 from knowledge import vuln_reqs_met, vulns_for
 
-
+# kinda arbitrary point system
+# no industry standard that I (mánu) could find
+# feel free to argue if one needs
+# a lower or higher value
 ACTION_COSTS = {
     DISCOVER_HOST: 1,
     SCAN_HOST: 1,
@@ -27,7 +30,7 @@ ACTION_COSTS = {
     EXPLOIT_UPLOAD: 3,
     READ_SENSITIVE_FILE: 1,
     USE_CREDS_SSH: 2,
-    BRUTEFORCE_SSH: 15,
+    BRUTEFORCE_SSH: 15, # last resort
     PIVOT_TO_HOST: 2,
     ENUM_SMB: 2,
     READ_SMB_SHARE: 1,
@@ -61,8 +64,10 @@ def apply_action(state: State, action: Action, scenario: dict) -> State | None:
             return None
 
         new_state.scanned_hosts.add(host_id)
-        # in declared scenarios services are pre-known; in discover mode
-        # they're empty here and get filled by the executor on replan
+
+        # in declared scenarios services are pre known.
+        # in discover mode they're empty here and get 
+        # filled by the executor on replan
         services = host.get("services", [])
         new_state.open_ports[host_id] = [s["port"] for s in services]
         new_state.discovered_services[host_id] = {
@@ -112,6 +117,7 @@ def apply_action(state: State, action: Action, scenario: dict) -> State | None:
             return None
 
         new_state.access_levels[host_id] = "web_shell"
+        new_state.footholds.add(host_id)
 
     elif action.name == READ_SENSITIVE_FILE:
         if new_state.get_access_level(host_id) != "web_shell":
@@ -147,7 +153,8 @@ def apply_action(state: State, action: Action, scenario: dict) -> State | None:
 
     elif action.name == PIVOT_TO_HOST:
         sources = [
-            h for h in scenario.get("hosts", [])
+            h
+            for h in scenario.get("hosts", [])
             if h["id"] in new_state.compromised_hosts
             and host_id in h.get("reaches", [])
         ]
@@ -164,7 +171,10 @@ def apply_action(state: State, action: Action, scenario: dict) -> State | None:
         services = new_state.discovered_services.get(host_id, {})
         if 445 not in services or services[445] != "smb":
             return None
-        if host_id in new_state.discovered_paths and "smb://shares" in new_state.discovered_paths[host_id]:
+        if (
+            host_id in new_state.discovered_paths
+            and "smb://shares" in new_state.discovered_paths[host_id]
+        ):
             return None
 
         if host_id not in new_state.discovered_paths:
@@ -177,7 +187,9 @@ def apply_action(state: State, action: Action, scenario: dict) -> State | None:
             return None
 
         for loot in host.get("loot", []):
-            if loot.get("type") == "credential" and loot.get("source", "").startswith("smb://"):
+            if loot.get("type") == "credential" and loot.get("source", "").startswith(
+                "smb://"
+            ):
                 _add_credential(new_state, loot)
 
     elif action.name == EXPLOIT_JENKINS:
@@ -189,6 +201,7 @@ def apply_action(state: State, action: Action, scenario: dict) -> State | None:
             return None
 
         new_state.access_levels[host_id] = "web_shell"
+        new_state.footholds.add(host_id)
 
     elif action.name == TRY_DEFAULT_CREDS:
         port = action.target_port

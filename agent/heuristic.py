@@ -11,6 +11,14 @@ SUBGOAL_COSTS = {
     "compromised": 2,
 }
 
+"""
+This is is the "what if" engine
+
+This runs when the planner is exploring possible futures
+It doesn't actually scan anything
+It just simulates what would happen by reading the scenario JSONs 
+pre declared services list and pretending the agent learned them.
+"""
 
 def heuristic(state: State, scenario: dict) -> int:
     remaining = 0

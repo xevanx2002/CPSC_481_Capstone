@@ -3,8 +3,13 @@ from typing import TYPE_CHECKING, Dict, List, Set
 
 if TYPE_CHECKING:
     from core.actions import Action
+"""
+**use Set when uniqueness matters**
+**use List when order/repetition matters** 
+**use Dict when you're keying off something**
+"""
 
-
+# simple login
 @dataclass
 class Credential:
     username: str
@@ -15,11 +20,17 @@ class Credential:
     confidence: str
 
 
+# essentially a "notebook" that starts empty and gets
+# filled as the agent gathers info.
+# the agent acts, observations come back and
+# the objects fields get filled in.
+# the notebook becomes the runtime_state variable in main
 @dataclass
 class State:
-    reachable_hosts: Set[str] = field(default_factory=set)
-    discovered_hosts: Set[str] = field(default_factory=set)
-    scanned_hosts: Set[str] = field(default_factory=set)
+                                                           # hosts the agent ...
+    reachable_hosts: Set[str] = field(default_factory=set) # - can talk to network wise
+    discovered_hosts: Set[str] = field(default_factory=set)# - knows exist
+    scanned_hosts: Set[str] = field(default_factory=set)   # - has fully port scanned
 
     open_ports: Dict[str, List[int]] = field(default_factory=dict)
     discovered_services: Dict[str, Dict[int, str]] = field(default_factory=dict)
@@ -27,14 +38,24 @@ class State:
     discovered_paths: Dict[str, Set[str]] = field(default_factory=dict)
     discovered_vulns: Dict[str, Set[str]] = field(default_factory=dict)
 
-    access_levels: Dict[str, str] = field(default_factory=dict)
-    compromised_hosts: Set[str] = field(default_factory=set)
+    access_levels: Dict[str, str] = field(default_factory=dict) # string ladder
+    compromised_hosts: Set[str] = field(default_factory=set) # strict win condition
 
-    creds_found: List[Credential] = field(default_factory=list)
+    # hosts where we got a verified web_shell foothold but haven't escalated
+    # to ssh/rdp yet. partial credit signal so the report doesn't show 0
+    # when a real RCE was achieved v
+    footholds: Set[str] = field(default_factory=set)
+
+    creds_found: List[Credential] = field(default_factory=list) 
 
     actions_taken: List["Action"] = field(default_factory=list)
     total_cost: int = 0
 
+# returns deep copy of current state. Important for the planner
+# A* explores many possible futures without polluting current state
+# by making clones
+# clones -> applies action to clone -> reasons about it
+# creates containers of clones wrapped in set() or dict()
     def clone(self) -> "State":
         return State(
             reachable_hosts=set(self.reachable_hosts),
@@ -53,6 +74,7 @@ class State:
             },
             access_levels=self.access_levels.copy(),
             compromised_hosts=set(self.compromised_hosts),
+            footholds=set(self.footholds),
             creds_found=self.creds_found[:],
             actions_taken=self.actions_taken[:],
             total_cost=self.total_cost,
@@ -64,6 +86,10 @@ class State:
     def get_access_level(self, host_id: str) -> str:
         return self.access_levels.get(host_id, "none")
 
+# returns tuple of every important fact in the state
+# A* needs to know "have i seen this already?" to avoid re exploring
+# signature() flatten whole state into a hashable fingerprint in a set called 
+# visited to skip redundant work
     def signature(self) -> tuple:
         return (
             frozenset(self.reachable_hosts),
@@ -91,5 +117,6 @@ class State:
             ),
             frozenset(self.access_levels.items()),
             frozenset(self.compromised_hosts),
+            frozenset(self.footholds),
             frozenset((c.username, c.password, c.access) for c in self.creds_found),
         )

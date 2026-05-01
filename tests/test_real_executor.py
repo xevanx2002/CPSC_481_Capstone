@@ -44,9 +44,9 @@ def test_hybrid_falls_through_on_not_implemented():
     hybrid = HybridExecutor(primary, fallback)
 
     scenario = {"hosts": [{"id": "h1", "ip": "1.2.3.4", "exposure": "external"}]}
-    # exploit_upload isn't yet implemented in RealExecutor → should fall to
-    # mock, which fails for its own reason ("vuln_not_identified"). Either
-    # way we should NOT see "not_implemented" surface up.
+    # exploit_upload isn't yet implemented in RealExecutor so it should fall to
+    # mock which fails for its own reason ("vuln_not_identified"). 
+    # Either way we should NOT see "not_implemented" surface up
     result = hybrid.execute(Action("exploit_upload", "h1"), State(), scenario)
     assert result.error != "not_implemented"
 
@@ -69,12 +69,13 @@ def _fake_response(status_code: int):
     class _R:
         def __init__(self, code):
             self.status_code = code
+
     return _R(status_code)
 
 
 def test_enumerate_http_collects_non_404_paths():
     scenario = {"hosts": [{"id": "h1", "ip": "10.0.0.5"}]}
-    # Tiny wordlist for the test so we can name every URL we expect.
+    # Tiny wordlist for the test so we can name every URL we expect
     executor = RealExecutor(http_wordlist=["/", "/admin", "/missing"])
 
     def fake_get(url, **kwargs):
@@ -83,9 +84,7 @@ def test_enumerate_http_collects_non_404_paths():
         return _fake_response(200)
 
     with patch("executors.real.requests.get", side_effect=fake_get):
-        result = executor.execute(
-            Action(ENUM_HTTP, "h1", 80), State(), scenario
-        )
+        result = executor.execute(Action(ENUM_HTTP, "h1", 80), State(), scenario)
 
     assert result.success
     assert set(result.observed["paths"]) == {"/", "/admin"}
@@ -99,9 +98,7 @@ def test_enumerate_http_fails_when_all_404():
         "executors.real.requests.get",
         return_value=_fake_response(404),
     ):
-        result = executor.execute(
-            Action(ENUM_HTTP, "h1", 80), State(), scenario
-        )
+        result = executor.execute(Action(ENUM_HTTP, "h1", 80), State(), scenario)
 
     assert not result.success
     assert result.error == "http_enum_failed"
@@ -109,9 +106,7 @@ def test_enumerate_http_fails_when_all_404():
 
 def _state_with_ssh_cred(user="nibbler", pw="hunter2"):
     s = State()
-    s.creds_found.append(
-        Credential(user, pw, "ssh", "user", "personal.php", "high")
-    )
+    s.creds_found.append(Credential(user, pw, "ssh", "user", "personal.php", "high"))
     return s
 
 
@@ -133,9 +128,7 @@ def test_use_credentials_ssh_succeeds_with_valid_cred():
     fake = _fake_ssh_client(whoami_output="nibbler\n")
 
     with patch("executors.real.paramiko.SSHClient", return_value=fake):
-        result = executor.execute(
-            Action(USE_CREDS_SSH, "h1", 22), state, scenario
-        )
+        result = executor.execute(Action(USE_CREDS_SSH, "h1", 22), state, scenario)
 
     assert result.success
     assert result.observed["access_level"] == "ssh_user"
@@ -150,9 +143,7 @@ def test_use_credentials_ssh_fails_when_auth_rejected():
     fake = _fake_ssh_client(auth_ok=False)
 
     with patch("executors.real.paramiko.SSHClient", return_value=fake):
-        result = executor.execute(
-            Action(USE_CREDS_SSH, "h1", 22), state, scenario
-        )
+        result = executor.execute(Action(USE_CREDS_SSH, "h1", 22), state, scenario)
 
     assert not result.success
     assert result.error == "ssh_auth_failed"
@@ -161,9 +152,7 @@ def test_use_credentials_ssh_fails_when_auth_rejected():
 def test_use_credentials_ssh_fails_when_no_ssh_creds():
     scenario = {"hosts": [{"id": "h1", "ip": "10.0.0.5"}]}
     state = State()  # no creds at all
-    result = RealExecutor().execute(
-        Action(USE_CREDS_SSH, "h1", 22), state, scenario
-    )
+    result = RealExecutor().execute(Action(USE_CREDS_SSH, "h1", 22), state, scenario)
     assert not result.success
     assert result.error == "no_ssh_creds"
 
@@ -221,7 +210,7 @@ def test_try_default_creds_fails_when_indicator_absent():
 
 
 def test_try_default_creds_fails_when_no_recipe():
-    # No paths discovered → KB doesn't match → no recipe
+    # No paths discovered -> KB doesn't match -> no recipe
     scenario = {"hosts": [{"id": "target", "ip": "10.10.10.75"}]}
     state = State()
     result = RealExecutor().execute(
@@ -257,9 +246,7 @@ def test_exploit_upload_succeeds_when_shell_returns_uid():
     sess.get.return_value = _http_response(text="uid=33(www-data) gid=33...")
 
     with patch("executors.real.requests.Session", return_value=sess):
-        result = executor.execute(
-            Action(EXPLOIT_UPLOAD, "target", 80), state, scenario
-        )
+        result = executor.execute(Action(EXPLOIT_UPLOAD, "target", 80), state, scenario)
 
     assert result.success
     assert result.observed["access_level"] == "web_shell"
@@ -277,9 +264,7 @@ def test_exploit_upload_fails_when_shell_does_not_execute():
     sess.get.return_value = _http_response(text="404 not found", status=404)
 
     with patch("executors.real.requests.Session", return_value=sess):
-        result = executor.execute(
-            Action(EXPLOIT_UPLOAD, "target", 80), state, scenario
-        )
+        result = executor.execute(Action(EXPLOIT_UPLOAD, "target", 80), state, scenario)
 
     assert not result.success
     assert result.error == "shell_unreachable"

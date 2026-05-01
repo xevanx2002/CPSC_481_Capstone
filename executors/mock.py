@@ -30,10 +30,12 @@ def _loot_creds(host: dict) -> list[dict]:
 
 
 class MockExecutor:
-    """Returns canned observations from the scenario JSON. No network I/O.
+    """
+    Returns canned observations from the scenario JSON. 
+    No network input / output
 
     Mirrors the contract in docs/action_execution_mapping.md so the runner can
-    be exercised end-to-end before any AWS lab VM exists.
+    be exercised end-to-end before any VMs we made exist
     """
 
     def execute(self, action: Action, state: State, scenario: dict) -> ExecutionResult:

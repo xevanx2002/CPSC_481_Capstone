@@ -20,8 +20,9 @@ def test_kb_matches_nibbleblog_when_signals_present():
 
 
 def test_kb_matches_app_before_creds_but_requires_them_for_exploit():
-    # the rule should "see" the app from the path alone — that's what lets
-    # try_default_creds fetch the recipe before any creds exist
+    # rule shouldn't see the app from the path alone
+    # that's what lets try_default_creds fetch
+    # the recipe before any creds exist
     host = {"id": "target"}
     state = State()
     state.discovered_paths["target"] = {"/nibbleblog/admin.php"}
@@ -29,12 +30,12 @@ def test_kb_matches_app_before_creds_but_requires_them_for_exploit():
     matched = vulns_for(host, state)
     assert any(v["id"] == "VF-UPLOAD-001" for v in matched)
 
-    # but the vuln still can't be "identified" yet because requires has a cred
+    # but the vuln still can't be identified yet because requires has a cred
     vuln = next(v for v in matched if v["id"] == "VF-UPLOAD-001")
     paths = state.discovered_paths["target"]
     assert vuln_reqs_met(vuln, paths, state) is False
 
-    # once an http cred shows up, requirements are met
+    # once an http cred shows up the reqs are met
     state.creds_found.append(
         Credential("admin", "nibbles", "http", "user", "default", "medium")
     )

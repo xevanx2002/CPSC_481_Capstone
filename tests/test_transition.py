@@ -24,15 +24,20 @@ def test_discover_host_adds_to_state(simple_scenario):
 
 
 def test_discover_requires_reachability(simple_scenario):
-    assert apply_action(State(), Action(DISCOVER_HOST, "web01"), simple_scenario) is None
+    assert (
+        apply_action(State(), Action(DISCOVER_HOST, "web01"), simple_scenario) is None
+    )
 
 
 def test_scan_requires_discovery(simple_scenario):
-    assert apply_action(
-        State(reachable_hosts={"web01"}),
-        Action(SCAN_HOST, "web01"),
-        simple_scenario,
-    ) is None
+    assert (
+        apply_action(
+            State(reachable_hosts={"web01"}),
+            Action(SCAN_HOST, "web01"),
+            simple_scenario,
+        )
+        is None
+    )
 
 
 def test_enum_http_requires_scan(simple_scenario):
@@ -61,6 +66,25 @@ def test_use_creds_requires_credentials(simple_scenario):
     s.scanned_hosts.add("web01")
     s.discovered_services["web01"] = {22: "ssh", 80: "http"}
     assert apply_action(s, Action(USE_CREDS_SSH, "web01"), simple_scenario) is None
+
+
+def test_exploit_upload_records_foothold(simple_scenario):
+    s = State(reachable_hosts={"web01"})
+    sequence = [
+        Action(DISCOVER_HOST, "web01"),
+        Action(SCAN_HOST, "web01"),
+        Action(ENUM_HTTP, "web01"),
+        Action(IDENTIFY_VULN, "web01"),
+        Action(EXPLOIT_UPLOAD, "web01"),
+    ]
+    for action in sequence:
+        s = apply_action(s, action, simple_scenario)
+        assert s is not None, f"action {action} returned None"
+
+    assert "web01" in s.footholds
+    # foothold alone shouldn't count as full compromise yet
+    assert "web01" not in s.compromised_hosts
+    assert s.get_access_level("web01") == "web_shell"
 
 
 def test_full_web_path_compromises_host(simple_scenario):
