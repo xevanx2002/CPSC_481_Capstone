@@ -14,6 +14,7 @@ from core.actions import (
     EXPLOIT_JENKINS,
     BRUTEFORCE_RDP,
     TRY_DEFAULT_CREDS,
+    EXPLOIT_PRIVESC,
 )
 
 ADMIN_PATH_HINTS = ("/admin", "/login", "/manage", "/wp-admin", "/console")
@@ -66,7 +67,7 @@ def legal_actions(state: State, scenario: dict) -> list[Action]:
         if (
             host_vuln_ids
             and not host_vuln_ids.issubset(known_vulns)
-            and _any_vuln_reqs_met(candidate_vulns, paths, state)
+            and _any_vuln_reqs_met(candidate_vulns, paths, state, host_id)
         ):
             actions.append(Action(IDENTIFY_VULN, host_id))
 
@@ -83,6 +84,14 @@ def legal_actions(state: State, scenario: dict) -> list[Action]:
             and host_id not in state.compromised_hosts
         ):
             actions.append(Action(EXPLOIT_JENKINS, host_id))
+
+        # privesc only when we already have a foothold and havent been promoted yet
+        if (
+            "VF-PRIVESC-001" in known_vulns
+            and state.get_access_level(host_id) == "web_shell"
+            and host_id not in state.compromised_hosts
+        ):
+            actions.append(Action(EXPLOIT_PRIVESC, host_id))
 
         if (
             state.get_access_level(host_id) == "web_shell"
@@ -135,8 +144,10 @@ def _http_port_enumerated(host: dict, port: int, paths: set) -> bool:
     return expected.issubset(paths) if expected else True
 
 
-def _any_vuln_reqs_met(vulns: list[dict], paths: set, state: State) -> bool:
-    return any(vuln_reqs_met(v, paths, state) for v in vulns)
+def _any_vuln_reqs_met(
+    vulns: list[dict], paths: set, state: State, host_id: str | None = None
+) -> bool:
+    return any(vuln_reqs_met(v, paths, state, host_id=host_id) for v in vulns)
 
 
 def _all_loot_collected(

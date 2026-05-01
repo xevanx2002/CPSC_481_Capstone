@@ -14,6 +14,7 @@ from core.actions import (
     EXPLOIT_JENKINS,
     BRUTEFORCE_RDP,
     TRY_DEFAULT_CREDS,
+    EXPLOIT_PRIVESC,
 )
 from core.state import State, Credential
 from knowledge import vuln_reqs_met, vulns_for
@@ -37,6 +38,7 @@ ACTION_COSTS = {
     EXPLOIT_JENKINS: 4,
     BRUTEFORCE_RDP: 12,
     TRY_DEFAULT_CREDS: 2,
+    EXPLOIT_PRIVESC: 5,
 }
 
 
@@ -101,7 +103,7 @@ def apply_action(state: State, action: Action, scenario: dict) -> State | None:
 
         added = False
         for vuln in vulns_for(host, new_state):
-            if not vuln_reqs_met(vuln, paths, new_state):
+            if not vuln_reqs_met(vuln, paths, new_state, host_id=host_id):
                 continue
             if vuln["id"] not in new_state.discovered_vulns[host_id]:
                 added = True
@@ -202,6 +204,21 @@ def apply_action(state: State, action: Action, scenario: dict) -> State | None:
 
         new_state.access_levels[host_id] = "web_shell"
         new_state.footholds.add(host_id)
+
+    elif action.name == EXPLOIT_PRIVESC:
+        # privesc bumps web_shell to root and counts as a real compromise
+        # only fires when we already have a foothold cause we need shell access
+        # to drop the payload and trigger the sudo
+        if host_id not in new_state.discovered_vulns:
+            return None
+        if "VF-PRIVESC-001" not in new_state.discovered_vulns[host_id]:
+            return None
+        # so we don't try to privesc when we already have ssh_user / root
+        if new_state.get_access_level(host_id) != "web_shell":
+            return None
+
+        new_state.access_levels[host_id] = "root"
+        new_state.compromised_hosts.add(host_id)
 
     elif action.name == TRY_DEFAULT_CREDS:
         port = action.target_port

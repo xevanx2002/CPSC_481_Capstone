@@ -95,7 +95,7 @@ class MockExecutor:
         matched = [
             v["id"]
             for v in vulns_for(host, state)
-            if vuln_reqs_met(v, host_paths, state)
+            if vuln_reqs_met(v, host_paths, state, host_id=action.target_host)
         ]
         if not matched:
             return ExecutionResult(action, False, error="no_vulns_identified")

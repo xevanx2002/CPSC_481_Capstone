@@ -6,6 +6,7 @@ from core.actions import (
     Action,
     DISCOVER_HOST,
     ENUM_HTTP,
+    EXPLOIT_PRIVESC,
     EXPLOIT_UPLOAD,
     READ_SENSITIVE_FILE,
     TRY_DEFAULT_CREDS,
@@ -354,4 +355,81 @@ def test_read_sensitive_file_fails_when_no_creds_in_body():
         )
 
     assert not result.success
-    assert result.error == "file_read_failed"
+
+
+def _state_with_web_shell_foothold():
+    s = State()
+    s.access_levels["target"] = "web_shell"
+    s.footholds.add("target")
+    s.shell_urls["target"] = "http://target.example.com/shell.php"
+    return s
+
+
+def test_exploit_privesc_succeeds_when_enum_and_verify_match():
+    scenario = {"hosts": [{"id": "target", "ip": "10.10.10.75"}]}
+    state = _state_with_web_shell_foothold()
+    executor = RealExecutor()
+
+    with patch(
+        "executors.real.requests.get",
+        side_effect=[
+            _http_response(text="(root) NOPASSWD: /home/nibbler/personal/stuff/monitor.sh"),
+            _http_response(text=""),
+            _http_response(text=""),
+            _http_response(text=""),
+            _http_response(text="uid=0(root) gid=0(root) groups=0(root)"),
+        ],
+    ):
+        result = executor.execute(Action(EXPLOIT_PRIVESC, "target"), state, scenario)
+
+    assert result.success
+    assert result.observed["access_level"] == "root"
+    assert result.observed["compromised"] is True
+
+
+def test_exploit_privesc_fails_when_enum_indicator_missing():
+    scenario = {"hosts": [{"id": "target", "ip": "10.10.10.75"}]}
+    state = _state_with_web_shell_foothold()
+    executor = RealExecutor()
+
+    with patch(
+        "executors.real.requests.get",
+        return_value=_http_response(text="user may not run sudo"),
+    ):
+        result = executor.execute(Action(EXPLOIT_PRIVESC, "target"), state, scenario)
+
+    assert not result.success
+    assert result.error == "not_vulnerable"
+
+
+def test_exploit_privesc_fails_when_no_shell_url():
+    scenario = {"hosts": [{"id": "target", "ip": "10.10.10.75"}]}
+    state = _state_with_web_shell_foothold()
+    state.shell_urls.clear()
+    executor = RealExecutor()
+
+    result = executor.execute(Action(EXPLOIT_PRIVESC, "target"), state, scenario)
+
+    assert not result.success
+    assert result.error == "no_shell_url"
+
+
+def test_exploit_privesc_fails_when_verify_returns_non_root():
+    scenario = {"hosts": [{"id": "target", "ip": "10.10.10.75"}]}
+    state = _state_with_web_shell_foothold()
+    executor = RealExecutor()
+
+    with patch(
+        "executors.real.requests.get",
+        side_effect=[
+            _http_response(text="NOPASSWD: /home/nibbler/personal/stuff/monitor.sh"),
+            _http_response(text=""),
+            _http_response(text=""),
+            _http_response(text=""),
+            _http_response(text="uid=1001(nibbler) gid=1001(nibbler)"),
+        ],
+    ):
+        result = executor.execute(Action(EXPLOIT_PRIVESC, "target"), state, scenario)
+
+    assert not result.success
+    assert result.error == "privesc_unverified"

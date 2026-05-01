@@ -46,7 +46,11 @@ class State:
     # when a real RCE was achieved v
     footholds: Set[str] = field(default_factory=set)
 
-    creds_found: List[Credential] = field(default_factory=list) 
+    # shell URLs for hosts where we landed a web shell
+    # privesc and post-exploit actions reach back through these to run commands
+    shell_urls: Dict[str, str] = field(default_factory=dict)
+
+    creds_found: List[Credential] = field(default_factory=list)
 
     actions_taken: List["Action"] = field(default_factory=list)
     total_cost: int = 0
@@ -75,6 +79,7 @@ class State:
             access_levels=self.access_levels.copy(),
             compromised_hosts=set(self.compromised_hosts),
             footholds=set(self.footholds),
+            shell_urls=dict(self.shell_urls),
             creds_found=self.creds_found[:],
             actions_taken=self.actions_taken[:],
             total_cost=self.total_cost,
@@ -118,5 +123,6 @@ class State:
             frozenset(self.access_levels.items()),
             frozenset(self.compromised_hosts),
             frozenset(self.footholds),
+            frozenset(self.shell_urls.items()),
             frozenset((c.username, c.password, c.access) for c in self.creds_found),
         )

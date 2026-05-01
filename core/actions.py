@@ -16,6 +16,7 @@ READ_SMB_SHARE = "read_smb_share"
 EXPLOIT_JENKINS = "exploit_jenkins"
 BRUTEFORCE_RDP = "bruteforce_rdp"
 TRY_DEFAULT_CREDS = "try_default_creds"
+EXPLOIT_PRIVESC = "exploit_privesc"
 
 # frozen so it's hashable later
 @dataclass(frozen=True)
