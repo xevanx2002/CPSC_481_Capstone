@@ -106,11 +106,12 @@ class MockExecutor:
             return ExecutionResult(action, False, error="vuln_not_identified")
         host = _find_host(scenario, action.target_host)
         ip = host.get("ip", "?") if host else "?"
+        shell_url = f"http://{ip}/uploads/webshell.php"
         return ExecutionResult(
             action,
             True,
-            observed={"access_level": "web_shell"},
-            artifacts={"shell_url": f"http://{ip}/uploads/webshell.php"},
+            observed={"access_level": "web_shell", "shell_url": shell_url},
+            artifacts={"shell_url": shell_url},
         )
 
     def _do_exploit_jenkins(self, action, state, scenario):
@@ -118,7 +119,26 @@ class MockExecutor:
             action.target_host, set()
         ):
             return ExecutionResult(action, False, error="vuln_not_identified")
-        return ExecutionResult(action, True, observed={"access_level": "web_shell"})
+        host = _find_host(scenario, action.target_host)
+        ip = host.get("ip", "?") if host else "?"
+        shell_url = f"http://{ip}/jenkins/script-shell"
+        return ExecutionResult(
+            action,
+            True,
+            observed={"access_level": "web_shell", "shell_url": shell_url},
+            artifacts={"shell_url": shell_url},
+        )
+
+    def _do_exploit_privesc(self, action, state, scenario):
+        if "VF-PRIVESC-001" not in state.discovered_vulns.get(
+            action.target_host, set()
+        ):
+            return ExecutionResult(action, False, error="vuln_not_identified")
+        if state.access_levels.get(action.target_host) != "web_shell":
+            return ExecutionResult(action, False, error="no_web_shell")
+        return ExecutionResult(
+            action, True, observed={"access_level": "root", "compromised": True}
+        )
 
     def _do_read_sensitive_file(self, action, state, scenario):
         if state.access_levels.get(action.target_host) != "web_shell":

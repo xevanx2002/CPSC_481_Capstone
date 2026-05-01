@@ -414,6 +414,39 @@ def test_exploit_privesc_fails_when_no_shell_url():
     assert result.error == "no_shell_url"
 
 
+def test_exploit_privesc_skips_setup_when_recipe_omits_it():
+    # recipe without setup_command should fire 4 GETs (enum + drop + trigger + verify)
+    # not 5. minimal recipe shape — just the required fields.
+    minimal_recipe = {
+        "id": "VF-PRIVESC-TEST",
+        "gives": ["root"],
+        "enum_command": "sudo -l",
+        "enum_indicator": r"NOPASSWD",
+        "payload_path": "/tmp/x.sh",
+        "payload_content": "#!/bin/bash\nid\n",
+        "trigger_command": "sudo /tmp/x.sh",
+        "verify_command": "id",
+        "verify_indicator": r"uid=0",
+    }
+    scenario = {"hosts": [{"id": "target", "ip": "10.10.10.75"}]}
+    state = _state_with_web_shell_foothold()
+    executor = RealExecutor()
+
+    with patch("executors.real.recipe_for", return_value=minimal_recipe), patch(
+        "executors.real.requests.get",
+        side_effect=[
+            _http_response(text="(root) NOPASSWD: /tmp/x.sh"),
+            _http_response(text=""),
+            _http_response(text=""),
+            _http_response(text="uid=0(root)"),
+        ],
+    ) as mock_get:
+        result = executor.execute(Action(EXPLOIT_PRIVESC, "target"), state, scenario)
+
+    assert result.success
+    assert mock_get.call_count == 4
+
+
 def test_exploit_privesc_fails_when_verify_returns_non_root():
     scenario = {"hosts": [{"id": "target", "ip": "10.10.10.75"}]}
     state = _state_with_web_shell_foothold()

@@ -59,3 +59,25 @@ def test_recipe_for_returns_none_when_no_matching_capability():
     state = _state_with_nibbleblog()
     # no rule on this host gives "domain_admin"
     assert recipe_for(host, state, "domain_admin") is None
+
+
+def test_vuln_reqs_met_access_prefix_passes_when_level_matches():
+    vuln = {"requires": ["access:web_shell"]}
+    state = State()
+    state.access_levels["target"] = "web_shell"
+    assert vuln_reqs_met(vuln, set(), state, host_id="target") is True
+
+
+def test_vuln_reqs_met_access_prefix_fails_when_level_lower():
+    vuln = {"requires": ["access:web_shell"]}
+    state = State()
+    state.access_levels["target"] = "none"
+    assert vuln_reqs_met(vuln, set(), state, host_id="target") is False
+
+
+def test_vuln_reqs_met_access_prefix_fails_when_host_id_missing():
+    vuln = {"requires": ["access:web_shell"]}
+    state = State()
+    state.access_levels["target"] = "web_shell"
+    # without host_id we can't verify, must fail closed
+    assert vuln_reqs_met(vuln, set(), state) is False

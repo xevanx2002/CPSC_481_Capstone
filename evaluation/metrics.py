@@ -1,3 +1,5 @@
+from knowledge.vuln_kb import RULES, _strip_predicate
+
 SEVERITY_POINTS = {"low": 10, "medium": 25, "high": 50, "critical": 80}
 
 
@@ -9,6 +11,15 @@ def score_vuln(vuln: dict, host: dict, discovery_cost: int) -> int:
     return max(0, severity_score + host_value + exposure_bonus - discovery_cost)
 
 
+def _vuln_lookup(host: dict) -> dict:
+    # merge KB rules with scenario-declared vulns - declared wins on conflict
+    # so a scenario can override a KB rule's cost or severity if it wants
+    out = {r["id"]: _strip_predicate(r) for r in RULES}
+    for declared in host.get("vulnerabilities", []):
+        out[declared["id"]] = declared
+    return out
+
+
 def score_result(result, scenario: dict) -> int:
     if result is None:
         return 0
@@ -18,9 +29,11 @@ def score_result(result, scenario: dict) -> int:
     for host in scenario.get("hosts", []):
         host_id = host["id"]
         discovered = result.discovered_vulns.get(host_id, set())
+        lookup = _vuln_lookup(host)
 
-        for vuln in host.get("vulnerabilities", []):
-            if vuln["id"] in discovered:
+        for vid in discovered:
+            vuln = lookup.get(vid)
+            if vuln is not None:
                 total += score_vuln(vuln, host, result.total_cost)
 
     compromised_bonus = 25 * len(result.compromised_hosts)
