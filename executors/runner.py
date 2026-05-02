@@ -87,6 +87,8 @@ def execute_with_replan(
     scenario: dict,
     executor: Executor,
     max_failures: int = 8,
+    on_action_start=None,
+    on_action_complete=None,
 ) -> tuple[State, list[ExecutionResult]]:
     """
     Plan-execute-observe-replan loop
@@ -95,6 +97,10 @@ def execute_with_replan(
     observations -> replans
     Failed actions are excluded from future planning so A* finds an alternative route
     Stops when the goal is reached or no plan exists or max_failures is exhausted
+
+    Optional hooks let callers stream progress as actions fire:
+    - on_action_start(action, index) called right before executor.execute
+    - on_action_complete(result, index) called right after, with the result
     """
     runtime = _initial_runtime_state(scenario)
     log: list[ExecutionResult] = []
@@ -122,8 +128,16 @@ def execute_with_replan(
             if not legal:
                 break
             next_action = min(legal, key=lambda a: ACTION_COSTS.get(a.name, 99))
+
+        action_index = len(log) + 1
+        if on_action_start is not None:
+            on_action_start(next_action, action_index)
+
         result = executor.execute(next_action, runtime, scenario)
         log.append(result)
+
+        if on_action_complete is not None:
+            on_action_complete(result, action_index)
 
         if result.success:
             _merge_observed(runtime, next_action, result)

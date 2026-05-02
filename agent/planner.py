@@ -24,6 +24,7 @@ def plan(
     scenario: dict,
     start: Optional[State] = None,
     excluded_actions: Optional[set] = None,
+    stats: Optional[dict] = None,
 ) -> Optional[State]:
     if start is None:
         start = State()
@@ -32,6 +33,9 @@ def plan(
                 start.reachable_hosts.add(host["id"])
 
     if is_goal(start, scenario):
+        if stats is not None:
+            stats["nodes_expanded"] = 0
+            stats["nodes_pushed"] = 0
         return start
 
     excluded = excluded_actions or set()
@@ -44,12 +48,17 @@ def plan(
     )
 
     best_g: dict = {start.signature(): start.total_cost}
+    nodes_expanded = 0
 
     while frontier:
         node = heapq.heappop(frontier)
         state = node.state
+        nodes_expanded += 1
 
         if is_goal(state, scenario):
+            if stats is not None:
+                stats["nodes_expanded"] = nodes_expanded
+                stats["nodes_pushed"] = counter + 1
             return state
 
         sig = state.signature()
@@ -72,4 +81,7 @@ def plan(
             f = child.total_cost + heuristic(child, scenario)
             heapq.heappush(frontier, _Node(f=f, counter=counter, state=child))
 
+    if stats is not None:
+        stats["nodes_expanded"] = nodes_expanded
+        stats["nodes_pushed"] = counter + 1
     return None

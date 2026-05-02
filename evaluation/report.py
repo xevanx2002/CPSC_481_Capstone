@@ -66,6 +66,8 @@ def print_live_report(scenario: dict, runtime_state, log, score: int):
         print(entry.raw)
         print()
 
+    _print_loot_summary(runtime_state, scenario)
+
     # outcome banner
     GREEN = "\033[1;32m"
     ORANGE = "\033[38;5;208m"  # 256-color orange
@@ -90,3 +92,57 @@ def print_live_report(scenario: dict, runtime_state, log, score: int):
     if failed:
         counts += f"  ·  {failed} failed"
     print(f"{tag}  ·  {detail}  ·  {counts}{RESET}")
+
+
+# show what the agent actually stole, not just counts
+def _print_loot_summary(runtime_state, scenario: dict):
+    creds = runtime_state.creds_found
+    shell_urls = getattr(runtime_state, "shell_urls", {})
+    discovered_vulns = runtime_state.discovered_vulns
+    access_levels = runtime_state.access_levels
+
+    has_anything = creds or shell_urls or discovered_vulns or access_levels
+    if not has_anything:
+        return
+
+    CYAN = "\033[36m"
+    DIM = "\033[2m"
+    RESET = "\033[0m"
+
+    print(f"{CYAN}─────────── Loot Summary ───────────{RESET}")
+
+    if creds:
+        print(f"Credentials ({len(creds)}):")
+        for c in creds:
+            print(
+                f"  - {c.username} / {c.password}  "
+                f"{DIM}(access={c.access}, source={c.source}, "
+                f"confidence={c.confidence}){RESET}"
+            )
+
+    if shell_urls:
+        print("Shell URLs:")
+        for host, url in sorted(shell_urls.items()):
+            print(f"  - {host}  ->  {url}")
+
+    if discovered_vulns:
+        # build a vuln_id -> severity lookup from scenario + KB
+        from knowledge.vuln_kb import RULES
+        sev_lookup = {r["id"]: r.get("severity", "?") for r in RULES}
+        for host in scenario.get("hosts", []):
+            for v in host.get("vulnerabilities", []):
+                sev_lookup[v["id"]] = v.get("severity", "?")
+
+        print("Vulnerabilities Identified:")
+        for host_id, vuln_ids in sorted(discovered_vulns.items()):
+            entries = ", ".join(
+                f"{vid} ({sev_lookup.get(vid, '?')})" for vid in sorted(vuln_ids)
+            )
+            print(f"  - {host_id}: {entries}")
+
+    if access_levels:
+        print("Access Achieved:")
+        for host_id, level in sorted(access_levels.items()):
+            print(f"  - {host_id}: {level}")
+
+    print()

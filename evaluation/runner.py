@@ -39,9 +39,14 @@ def run_evaluation(scenario_path: str, target_override: str | None = None):
     return scenario, result, score
 
 
-def run_live(scenario_path: str, target_override: str | None = None):
+def run_live(
+    scenario_path: str,
+    target_override: str | None = None,
+    on_action_start=None,
+    on_action_complete=None,
+):
     # plan and execute against a real target
-    # Uses RealExecutor only so unimplemented 
+    # Uses RealExecutor only so unimplemented
     # actions surface as honest failures instead of being
     # silently filled in with mock data
     from executors import RealExecutor, execute_with_replan
@@ -50,7 +55,12 @@ def run_live(scenario_path: str, target_override: str | None = None):
     scenario = json.loads(path.read_text())
     _resolve_unknown_ips(scenario, target_override)
 
-    runtime_state, log = execute_with_replan(scenario, RealExecutor())
+    runtime_state, log = execute_with_replan(
+        scenario,
+        RealExecutor(),
+        on_action_start=on_action_start,
+        on_action_complete=on_action_complete,
+    )
     score = score_result(runtime_state, scenario)
 
     return scenario, runtime_state, log, score
