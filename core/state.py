@@ -50,6 +50,10 @@ class State:
     # privesc and post-exploit actions reach back through these to run commands
     shell_urls: Dict[str, str] = field(default_factory=dict)
 
+    # per host file contents captured by post exploit collection.
+    # keyed by absolute path on target.
+    loot: Dict[str, Dict[str, str]] = field(default_factory=dict)
+
     creds_found: List[Credential] = field(default_factory=list)
 
     actions_taken: List["Action"] = field(default_factory=list)
@@ -80,6 +84,7 @@ class State:
             compromised_hosts=set(self.compromised_hosts),
             footholds=set(self.footholds),
             shell_urls=dict(self.shell_urls),
+            loot={host: dict(files) for host, files in self.loot.items()},
             creds_found=self.creds_found[:],
             actions_taken=self.actions_taken[:],
             total_cost=self.total_cost,
@@ -124,5 +129,12 @@ class State:
             frozenset(self.compromised_hosts),
             frozenset(self.footholds),
             frozenset(self.shell_urls.items()),
+            # signature includes paths but not contents. dedupes without
+            # bloating the state space with byte for byte differences.
+            frozenset(
+                (host, path)
+                for host, files in self.loot.items()
+                for path in files
+            ),
             frozenset((c.username, c.password, c.access) for c in self.creds_found),
         )

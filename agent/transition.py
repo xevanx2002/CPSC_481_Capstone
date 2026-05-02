@@ -15,9 +15,10 @@ from core.actions import (
     BRUTEFORCE_RDP,
     TRY_DEFAULT_CREDS,
     EXPLOIT_PRIVESC,
+    CAPTURE_FLAGS,
 )
 from core.state import State, Credential
-from knowledge import vuln_reqs_met, vulns_for
+from knowledge import loot_files_for_discovered, vuln_reqs_met, vulns_for
 
 # kinda arbitrary point system
 # no industry standard that I (mánu) could find
@@ -39,6 +40,7 @@ ACTION_COSTS = {
     BRUTEFORCE_RDP: 12,
     TRY_DEFAULT_CREDS: 2,
     EXPLOIT_PRIVESC: 5,
+    CAPTURE_FLAGS: 1,
 }
 
 
@@ -241,6 +243,29 @@ def apply_action(state: State, action: Action, scenario: dict) -> State | None:
 
         if not added:
             return None
+
+    elif action.name == CAPTURE_FLAGS:
+        # capture_flags reads files declared in any discovered vulns loot_files
+        # field. transition only records the paths. real contents come from the
+        # executor's observed dict at merge time.
+        access = new_state.get_access_level(host_id)
+        if access not in ("web_shell", "ssh_user", "rdp_user", "root"):
+            return None
+
+        already = new_state.loot.get(host_id, {})
+        paths_to_grab = [
+            p
+            for p in loot_files_for_discovered(host, new_state, host_id)
+            if p not in already
+        ]
+
+        if not paths_to_grab:
+            return None
+
+        if host_id not in new_state.loot:
+            new_state.loot[host_id] = {}
+        for path in paths_to_grab:
+            new_state.loot[host_id][path] = ""
 
     elif action.name == BRUTEFORCE_RDP:
         services = new_state.discovered_services.get(host_id, {})

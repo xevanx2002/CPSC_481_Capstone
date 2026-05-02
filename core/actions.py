@@ -17,6 +17,7 @@ EXPLOIT_JENKINS = "exploit_jenkins"
 BRUTEFORCE_RDP = "bruteforce_rdp"
 TRY_DEFAULT_CREDS = "try_default_creds"
 EXPLOIT_PRIVESC = "exploit_privesc"
+CAPTURE_FLAGS = "capture_flags"
 
 # frozen so it's hashable later
 @dataclass(frozen=True)

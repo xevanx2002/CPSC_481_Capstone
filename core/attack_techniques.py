@@ -19,6 +19,7 @@ from core.actions import (
     EXPLOIT_UPLOAD,
     EXPLOIT_JENKINS,
     EXPLOIT_PRIVESC,
+    CAPTURE_FLAGS,
     READ_SENSITIVE_FILE,
     READ_SMB_SHARE,
     USE_CREDS_SSH,
@@ -92,6 +93,12 @@ TECHNIQUES: dict[str, dict] = {
         "tactic_name": "Credential Access",
         "technique_id": "T1552.001",
         "technique_name": "Credentials In Files",
+    },
+    CAPTURE_FLAGS: {
+        "tactic_id": "TA0009",
+        "tactic_name": "Collection",
+        "technique_id": "T1005",
+        "technique_name": "Data from Local System",
     },
     READ_SMB_SHARE: {
         "tactic_id": "TA0009",

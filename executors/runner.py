@@ -1,4 +1,4 @@
-from core.actions import Action
+from core.actions import Action, CAPTURE_FLAGS
 from core.state import Credential, State
 from agent.action_generator import legal_actions
 from agent.planner import is_goal, plan
@@ -47,6 +47,9 @@ def _merge_observed(state: State, action: Action, result: ExecutionResult) -> No
 
     if obs.get("compromised"):
         state.compromised_hosts.add(host)
+
+    if "loot_captured" in obs:
+        state.loot.setdefault(host, {}).update(obs["loot_captured"])
 
     for cred in obs.get("creds", []):
         state.creds_found.append(Credential(**cred))
@@ -147,5 +150,27 @@ def execute_with_replan(
             failures += 1
             if failures > max_failures:
                 break
+
+    # agent reached its goal. one final sweep to grab any reachable flags
+    # before the report renders. proof of compromise for HTB style targets
+    # where /root/root.txt is the convention.
+    if is_goal(runtime, scenario):
+        for action in [
+            a for a in legal_actions(runtime, scenario) if a.name == CAPTURE_FLAGS
+        ]:
+            if action in excluded:
+                continue
+            action_index = len(log) + 1
+            if on_action_start is not None:
+                on_action_start(action, action_index)
+            result = executor.execute(action, runtime, scenario)
+            log.append(result)
+            if on_action_complete is not None:
+                on_action_complete(result, action_index)
+            if result.success:
+                _merge_observed(runtime, action, result)
+                runtime.actions_taken.append(action)
+            else:
+                excluded.add(action)
 
     return runtime, log

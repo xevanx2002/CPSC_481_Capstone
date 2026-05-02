@@ -100,8 +100,9 @@ def _print_loot_summary(runtime_state, scenario: dict):
     shell_urls = getattr(runtime_state, "shell_urls", {})
     discovered_vulns = runtime_state.discovered_vulns
     access_levels = runtime_state.access_levels
+    loot = getattr(runtime_state, "loot", {})
 
-    has_anything = creds or shell_urls or discovered_vulns or access_levels
+    has_anything = creds or shell_urls or discovered_vulns or access_levels or loot
     if not has_anything:
         return
 
@@ -144,5 +145,20 @@ def _print_loot_summary(runtime_state, scenario: dict):
         print("Access Achieved:")
         for host_id, level in sorted(access_levels.items()):
             print(f"  - {host_id}: {level}")
+
+    if loot:
+        any_files = any(files for files in loot.values())
+        if any_files:
+            # trims long contents to first line / 64 chars. flag files are
+            # usually one line MD5 hashes so this preserves them, longer
+            # files get a preview.
+            print("Captured Files:")
+            for host_id, files in sorted(loot.items()):
+                for path, content in sorted(files.items()):
+                    preview = (content or "").strip().splitlines()
+                    head = preview[0] if preview else "<empty>"
+                    if len(head) > 64:
+                        head = head[:61] + "..."
+                    print(f"  - {host_id}:{path}  ->  {head}")
 
     print()

@@ -15,11 +15,12 @@ from core.actions import (
     BRUTEFORCE_RDP,
     TRY_DEFAULT_CREDS,
     EXPLOIT_PRIVESC,
+    CAPTURE_FLAGS,
 )
 
 ADMIN_PATH_HINTS = ("/admin", "/login", "/manage", "/wp-admin", "/console")
 from core.state import State
-from knowledge import vuln_reqs_met, vulns_for
+from knowledge import loot_files_for_discovered, vuln_reqs_met, vulns_for
 
 
 def legal_actions(state: State, scenario: dict) -> list[Action]:
@@ -93,6 +94,14 @@ def legal_actions(state: State, scenario: dict) -> list[Action]:
         ):
             actions.append(Action(EXPLOIT_PRIVESC, host_id))
 
+        if state.get_access_level(host_id) in (
+            "web_shell",
+            "ssh_user",
+            "rdp_user",
+            "root",
+        ) and _has_uncaptured_loot(state, host, host_id, candidate_vulns, known_vulns):
+            actions.append(Action(CAPTURE_FLAGS, host_id))
+
         if (
             state.get_access_level(host_id) == "web_shell"
             and any(
@@ -148,6 +157,25 @@ def _any_vuln_reqs_met(
     vulns: list[dict], paths: set, state: State, host_id: str | None = None
 ) -> bool:
     return any(vuln_reqs_met(v, paths, state, host_id=host_id) for v in vulns)
+
+
+def _has_uncaptured_loot(
+    state: State,
+    host: dict,
+    host_id: str,
+    candidate_vulns: list[dict],
+    known_vulns: set,
+) -> bool:
+    """
+    True when at least one discovered vuln on this host declares a loot_file
+    we haven't already captured. used to gate CAPTURE_FLAGS emission so we
+    don't emit a no op action.
+    """
+    captured = state.loot.get(host_id, {})
+    for path in loot_files_for_discovered(host, state, host_id):
+        if path not in captured:
+            return True
+    return False
 
 
 def _all_loot_collected(

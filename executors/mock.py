@@ -1,7 +1,7 @@
 from core.actions import Action
 from core.state import State
 from executors.base import ExecutionResult
-from knowledge import vuln_reqs_met, vulns_for
+from knowledge import loot_files_for_discovered, vuln_reqs_met, vulns_for
 
 
 def _find_host(scenario: dict, host_id: str) -> dict | None:
@@ -213,6 +213,31 @@ class MockExecutor:
         if not creds:
             return ExecutionResult(action, False, error="default_creds_failed")
         return ExecutionResult(action, True, observed={"creds": creds})
+
+    def _do_capture_flags(self, action, state, scenario):
+        host = _find_host(scenario, action.target_host)
+        if host is None:
+            return ExecutionResult(action, False, error="host_unknown")
+
+        access = state.access_levels.get(action.target_host, "none")
+        if access not in ("web_shell", "ssh_user", "rdp_user", "root"):
+            return ExecutionResult(action, False, error="no_shell_for_capture")
+
+        already = state.loot.get(action.target_host, {})
+        loot_captured: dict[str, str] = {}
+        for path in loot_files_for_discovered(host, state, action.target_host):
+            if path in already:
+                continue
+            loot_captured[path] = f"<mock-loot:{path}>"
+
+        if not loot_captured:
+            return ExecutionResult(action, False, error="nothing_to_capture")
+
+        return ExecutionResult(
+            action,
+            True,
+            observed={"loot_captured": loot_captured},
+        )
 
     def _do_pivot_to_host(self, action, state, scenario):
         target = action.target_host
