@@ -4,9 +4,9 @@
 
 VectorForge is an intelligent agent that **plans and executes** credential-based attack chains against authorized lab networks. It models penetration testing as a state-space search problem and uses **A\*** with a domain-specific heuristic to choose an optimal sequence of reconnaissance and exploitation actions before any operation runs against a live host.
 
-The system covers Track C (Cross-Course / Capstone Integration): AI planning combined with real systems/security execution against owned virtual machines.
+The system covers Track C (Cross-Course / Capstone Integration): AI planning combined with real systems/security execution against authorized training-platform machines (HackTheBox).
 
-> _"every machine has a path. find it."_
+> *"every machine has a path. find it."*
 
 ---
 
@@ -14,7 +14,7 @@ The system covers Track C (Cross-Course / Capstone Integration): AI planning com
 
 ![VectorForge live run against HackTheBox](docs/figures/demo.gif)
 
-_Earlier build — current version takes the target IP as a `--target <IP>` CLI flag instead of prompting._
+*Earlier build — current version takes the target IP as a `--target <IP>` CLI flag instead of prompting.*
 
 ---
 
@@ -23,9 +23,9 @@ _Earlier build — current version takes the target IP as a `--target <IP>` CLI 
 Given a scenario describing a target network (hosts, services, vulnerabilities, credentials, reachability), VectorForge:
 
 1. Models the network as a **state space** — discovered hosts, open ports, services, web paths, credentials, per-host access levels, compromised hosts.
-2. Generates legal actions via rule-based reasoning (e.g., _if HTTP is identified, it can be enumerated; if credentials are found for SSH, they can be used_).
+2. Generates legal actions via rule-based reasoning (e.g., *if HTTP is identified, it can be enumerated; if credentials are found for SSH, they can be used*).
 3. Searches with **A\*** over `(g(n) = action cost) + (h(n) = distance-to-goal heuristic)` to find a cheap, high-value path to compromise.
-4. Executes the chosen plan through a pluggable executor layer — **MockExecutor** for fast repeatable evaluation, **RealExecutor** for live lab VMs (nmap, gobuster, curl, paramiko).
+4. Executes the chosen plan through a pluggable executor layer — **MockExecutor** for fast repeatable evaluation, **RealExecutor** for live targets (nmap, gobuster, curl, paramiko), and **HybridExecutor** that falls through Real → Mock for actions not yet wired live.
 5. Replans on failure when reality diverges from the model.
 
 Each chosen action is tagged with its corresponding **MITRE ATT&CK** technique for explainability.
@@ -34,15 +34,15 @@ Each chosen action is tagged with its corresponding **MITRE ATT&CK** technique f
 
 ## AI concepts used
 
-| Concept                                                 | Where it lives                                                                 |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Heuristic search (A\*)                                  | [agent/planner.py](agent/planner.py)                                           |
-| Admissible heuristic                                    | [agent/heuristic.py](agent/heuristic.py)                                       |
-| State-space representation                              | [core/state.py](core/state.py)                                                 |
-| Action vocabulary & transition function                 | [core/actions.py](core/actions.py), [agent/transition.py](agent/transition.py) |
-| Rule-based action legality                              | [agent/action_generator.py](agent/action_generator.py)                         |
-| Vulnerability knowledge base (rule-driven)              | [knowledge/vuln_kb.py](knowledge/vuln_kb.py)                                   |
-| Intelligent agent loop (perceive → plan → act → update) | [agent/agent.py](agent/agent.py), [executors/runner.py](executors/runner.py)   |
+| Concept | Where it lives |
+|---|---|
+| Heuristic search (A\*) | [agent/planner.py](agent/planner.py) |
+| Admissible heuristic | [agent/heuristic.py](agent/heuristic.py) |
+| State-space representation | [core/state.py](core/state.py) |
+| Action vocabulary & transition function | [core/actions.py](core/actions.py), [agent/transition.py](agent/transition.py) |
+| Rule-based action legality | [agent/action_generator.py](agent/action_generator.py) |
+| Vulnerability knowledge base (rule-driven) | [knowledge/vuln_kb.py](knowledge/vuln_kb.py) |
+| Intelligent agent loop (perceive → plan → act → update) | [agent/agent.py](agent/agent.py), [executors/runner.py](executors/runner.py) |
 
 ---
 
@@ -57,7 +57,7 @@ knowledge/     Generic vulnerability rule base (target-agnostic)
 scenarios/     JSON network descriptions (simple, medium, complex, HTB)
 evaluation/    Metrics, benchmark harness, comparative reports
 tests/         pytest suite covering planner, transitions, KB, executor
-docs/          Proposal + action-to-real-operation mapping spec
+docs/          Proposal, technical report, action-to-real-operation mapping, figures/
 main.py        CLI entry point
 ```
 
@@ -97,7 +97,7 @@ Prints the banner, the optimal action chain, per-action ATT&CK tagging, accumula
 python main.py scenarios/htb_bootstrap.json --live --target <IP>
 ```
 
-> Use **only** against infrastructure you own or are explicitly authorized to attack (team-built AWS lab, or commercial training platforms whose ToS permit attacks on hosted machines). See _Ethical scope_ below.
+> Use **only** against infrastructure you are explicitly authorized to attack — in this project, HackTheBox machines under their permitted-use terms of service. See *Ethical scope* below.
 
 ### Comparative benchmark (A\* vs. greedy vs. random)
 
@@ -125,7 +125,7 @@ The system reports quantitative metrics aligned with the rubric:
 - **Optimality** — total action cost vs. known-optimal hand-traced cost per scenario
 - **Search efficiency** — nodes expanded by A\* per scenario
 - **Strategy comparison** — A\* vs. greedy vs. random baseline (success rate, cost, actions)
-- **Execution success** — % of planned steps that succeed against real lab VMs
+- **Execution success** — % of planned steps that succeed against the live target
 - **Time-to-compromise** — wall-clock from plan start to goal state
 - **Loot / value captured** — sum of host values and vulnerability severities exploited
 
@@ -137,7 +137,7 @@ See [evaluation/benchmark.py](evaluation/benchmark.py), [evaluation/metrics.py](
 
 ```
         ┌─────────────────┐
-        │  scenarios/*.json│       ← declarative world
+        │ scenarios/*.json│       ← declarative world
         └────────┬────────┘
                  │ load
         ┌────────▼────────┐
@@ -147,20 +147,22 @@ See [evaluation/benchmark.py](evaluation/benchmark.py), [evaluation/metrics.py](
    ┌─────────────┼─────────────┐
    │             │             │
 ┌──▼──┐     ┌────▼────┐    ┌───▼───┐
-│State│◄────┤ Planner │    │ Vuln  │
+│State│◄────┤ Planner │◄───┤ Vuln  │
 └──▲──┘     └────┬────┘    │  KB   │
-   │             │ plan     └───────┘
-   │       ┌─────▼─────┐
-   │       │  Runner   │            ← walks plan, dispatches steps
-   │       └─────┬─────┘
-   │             │
-   │  ┌──────────┼──────────┐
-   │  │          │          │
-   │┌─▼──┐   ┌──▼───┐  ┌───▼────┐
-   ││Mock│   │ Real │  │ Hybrid │   ← executors
-   │└─┬──┘   └──┬───┘  └────┬───┘
-   │  │         │           │
-   └──┴─────────┴───────────┘
+   │             │ plan    └────▲──┘
+   │       ┌─────▼─────┐        │
+   │       │  Runner   │        │    ← walks plan, dispatches steps
+   │       └─────┬─────┘        │
+   │             │              │
+   │  ┌──────────┼─────────┐    │
+   │  │          │         │    │
+   │┌─▼──┐   ┌──▼───┐  ┌───▼──┐ │   ← executors also consult the KB
+   ││Mock│   │ Real │  │Hybrid│ │     (vuln recipes, loot files, default creds)
+   │└─┬──┘   └──┬───┘  └───┬──┘ │
+   │  │         │          │    │
+   │  └─────────┴──────────┴────┘
+   │            │
+   └────────────┘
         observed results → merge into State (or replan)
 ```
 
@@ -168,32 +170,25 @@ See [evaluation/benchmark.py](evaluation/benchmark.py), [evaluation/metrics.py](
 
 ## Roles
 
-### Systems Architect — Daniel Jochum
-
-Overall system architecture; AWS lab build (VPC, subnets, security groups); per-host configuration scripts; the runner that bridges plans to live operations; scenario ↔ real VM consistency.
-
 ### Agent Logic & Decision System Engineer — Mánu Uribe
+Core AI: state representation, action vocabulary, transition function, rule-based action generator, A\* search and severity-aware heuristic, vulnerability knowledge base, and the replan loop that recovers when real-world results diverge from the model.
 
-Core decision-making: state representation, action vocabulary, transition function, A\* search and heuristic, planner-to-runner output contract.
+### Systems Architect & Integration Engineer — Evan Wenzel
+Overall architecture, the Mock/Real/Hybrid executor layer, the runner that dispatches each plan step, the action-to-real-tool mapping spec, HackTheBox engagement setup, and MITRE ATT&CK technique tagging for explainability.
 
-### Evaluation & Analysis Engineer — Evan Wenzel
-
-Evaluation harness, metrics collection across scenarios, comparative analysis (A\* vs. baselines, modeled vs. observed cost), final results write-up.
+### Evaluation & Analysis Engineer — Daniel Jochum
+Comparative benchmark harness (A\* vs. greedy vs. random), evaluation metrics, test scenarios at three complexity levels, the pytest suite, and the final results write-up for the technical report.
 
 ---
 
 ## Ethical scope
 
-VectorForge operates **only** within infrastructure the team owns or is explicitly authorized to attack:
-
-- team-built virtual machines in the CSUF-provided AWS account (private subnet, no public IP)
-- commercial training platforms whose terms of service explicitly authorize attacks on their hosted machines
-
-No external systems, no production services, no real credentials, no public-internet targets. The expanded scope (real execution against lab VMs in addition to symbolic planning) was reviewed and approved by the course instructor before infrastructure work began.
+VectorForge operates **only** against infrastructure explicitly authorized for attack — HackTheBox machines under their permitted-use terms of service. No external systems, no production services, no real credentials, and no public-internet targets. Brute-force tools are tied to small lab-only wordlists. The scope was reviewed with the course instructor before live work began.
 
 ---
 
 ## Further reading
 
 - [docs/proposal.md](docs/proposal.md) — full project proposal
+- [docs/technical_report.md](docs/technical_report.md) — technical report
 - [docs/action_execution_mapping.md](docs/action_execution_mapping.md) — abstract-action → real-tool spec
